@@ -1,0 +1,54 @@
+# --- Private / environment-specific (never commit) ---
+# Anything holding account IDs, endpoints, keys, credentials or personal notes.
+*.tfvars
+!*.tfvars.example
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+private/
+notes/
+*.local.md
+CLAUDE.local.md
+.claude/settings.local.json
+.mcp.json
+# Raw Well-Architected assessment output (account IDs, ARNs) — only the sanitised summary in docs/ is public
+assessments/
+wa-evidence/
+
+# --- Terraform ---
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Lambda build artifacts ---
+*.zip
+lambda/package/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

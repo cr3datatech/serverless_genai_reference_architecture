@@ -1,4 +1,3 @@
-markdown
 # Serverless GenAI Reference Architecture
 
 A production-ready template for building Generative AI APIs on AWS using managed serverless services.
@@ -15,42 +14,45 @@ This repository provides a reusable, enterprise-grade reference architecture for
 
 ## Architecture
 
+```
 ┌─────────────────────────────────────────────────────────────┐
-│                     Client Application                       │
+│                     Client Application                      │
 └────────────────────────┬────────────────────────────────────┘
-                         │ HTTP/HTTPS + API Key
-                         ▼
+                         │ HTTP/HTTPS + API Key
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    API Gateway                               │
-│              (Authentication, Rate Limiting)                 │
+│                        API Gateway                          │
+│               (Authentication, Rate Limiting)               │
 └────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  Lambda Functions                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ - Converse API wrapper (streaming + non-streaming)  │   │
-│  │ - Request validation & model selection logic        │   │
-│  │ - Token counting & cost estimation                  │   │
-│  └──────────────────────────────────────────────────────┘   │
+│                     Lambda Functions                        │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ - Converse API wrapper (streaming + non-streaming)   │   │
+│  │ - Request validation & model selection logic         │   │
+│  │ - Token counting & cost estimation                   │   │
+│  └──────────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
+                         │
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                  AWS Bedrock                                 │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ - Claude 3 (Opus, Sonnet, Haiku)                    │   │
-│  │ - Other foundation models (optional)                │   │
-│  └──────────────────────────────────────────────────────┘   │
+│                        AWS Bedrock                          │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ - Claude 3 (Opus, Sonnet, Haiku)                     │   │
+│  │ - Other foundation models (optional)                 │   │
+│  └──────────────────────────────────────────────────────┘   │
 └────────────────────────┬────────────────────────────────────┘
-                         │
-     ┌───────────────────┼───────────────────┐
-     ▼                   ▼                   ▼
-┌─────────────┐  ┌──────────────┐  ┌──────────────┐
-│ CloudWatch  │  │  CloudWatch  │  │  X-Ray       │
-│   Logs      │  │   Metrics    │  │  Traces      │
-│  (Debug)    │  │ (Cost, latency)│  │(Performance) │
-└─────────────┘  └──────────────┘  └──────────────┘
+                         │
+     ┌───────────────────┼───────────────────┐
+     ▼                   ▼                   ▼
+┌───────────────┐  ┌────────────────┐  ┌───────────────┐
+│  CloudWatch   │  │   CloudWatch   │  │     X-Ray     │
+│     Logs      │  │    Metrics     │  │    Traces     │
+│   (Debug)     │  │ (Cost, latency)│  │ (Performance) │
+└───────────────┘  └────────────────┘  └───────────────┘
+```
+
 **Key Components:**
 - **API Gateway** — RESTful HTTP endpoint with authentication (Cognito/API keys)
 - **Lambda** — Stateless compute layer that calls Bedrock Converse API
@@ -61,32 +63,38 @@ This repository provides a reusable, enterprise-grade reference architecture for
 
 ## What's Included
 
+```
 serverless_genai_reference_architecture/
-├── terraform/                    # Infrastructure as Code
-│   ├── main.tf                  # Main resource definitions
-│   ├── variables.tf             # Input variables
-│   ├── outputs.tf               # Stack outputs (endpoint URL, etc.)
-│   ├── iam.tf                   # IAM roles & policies
-│   ├── api_gateway.tf           # API Gateway + auth
-│   ├── lambda.tf                # Lambda function config
-│   └── terraform.tfvars.example # Example variable values[1:28 PM]├── lambda/                       # Lambda function source
-│   ├── converse.py             # Bedrock Converse wrapper
-│   ├── utils.py[1:28 PM]# Token counting, cost calc, logging
-│   └── requirements.txt         # Python dependencies
-├── docs/                        # Documentation
-│   ├── ARCHITECTURE.md          # Detailed architecture & design decisions
-│   ├── DEPLOYMENT.md            # Step-by-step deployment guide
-│   ├── COST_ANALYSIS.md         # Bedrock pricing & optimization tips
-│   └── API_REFERENCE.md         # REST API endpoint documentation
-├── examples/                    # Example client code
-│   ├── python_client.py        # Python HTTP client
-│   └── curl_examples.sh        # cURL examples
-├── tests/                       # Unit & integration tests
-│   ├── test_converse.py        # Lambda function tests
-│   └── test_integration.py     # End-to-end tests
+├── bootstrap/iam/                # One-time least-privilege IAM setup (admin runs once)
+├── terraform/                    # Infrastructure as Code
+│   ├── main.tf                   # Main resource definitions
+│   ├── variables.tf              # Input variables
+│   ├── outputs.tf                # Stack outputs (endpoint URL, etc.)
+│   ├── iam.tf                    # IAM roles & policies
+│   ├── api_gateway.tf            # API Gateway + auth
+│   ├── lambda.tf                 # Lambda function config
+│   └── terraform.tfvars.example  # Example variable values
+├── lambda/                       # Lambda function source
+│   ├── converse.py               # Bedrock Converse wrapper
+│   ├── utils.py                  # Token counting, cost calc, logging
+│   └── requirements.txt          # Python dependencies
+├── docs/                         # Documentation
+│   ├── ARCHITECTURE.md           # Detailed architecture & design decisions
+│   ├── DEPLOYMENT.md             # Step-by-step deployment guide
+│   ├── COST_ANALYSIS.md          # Bedrock pricing & optimization tips
+│   ├── API_REFERENCE.md          # REST API endpoint documentation
+│   └── WELL_ARCHITECTED_REVIEW.md # Well-Architected audit findings & remediation
+├── examples/                     # Example client code
+│   ├── python_client.py          # Python HTTP client
+│   └── curl_examples.sh          # cURL examples
+├── tests/                        # Unit & integration tests
+│   ├── test_converse.py          # Lambda function tests
+│   └── test_integration.py       # End-to-end tests
 ├── .gitignore
-├── README.md                   # This file
-└── LICENSE                     # MIT License
+├── README.md                     # This file
+└── LICENSE                       # MIT License
+```
+
 ## Quick Start
 
 ### Prerequisites
@@ -99,30 +107,26 @@ serverless_genai_reference_architecture/
 
 1. **Clone & configure:**
    ```bash
-   git clone https://github.com/cr3datatech/serverless_genai_reference_architecture.git
-   cd serverless_genai_reference_architecture/terraform
-   
+   git clone <this-repo-url>
+   cd <repo-folder>/terraform
+
    cp terraform.tfvars.example terraform.tfvars
    # Edit terraform.tfvars with your values (region, project name, etc.)
-   
-
-
+   ```
 
 2. **Deploy to AWS:**
-   bash
+   ```bash
    terraform init
    terraform plan
    terraform apply
-   
-
-
+   ```
 
 3. **Test the API:**
-   bash
+   ```bash
    # Get your API endpoint from Terraform outputs
    API_KEY=$(terraform output -raw api_key)
    ENDPOINT=$(terraform output -raw api_gateway_endpoint)
-   
+
    curl -X POST "$ENDPOINT/chat" \
      -H "Authorization: Bearer $API_KEY" \
      -H "Content-Type: application/json" \
@@ -131,9 +135,7 @@ serverless_genai_reference_architecture/
        "messages": [{"role": "user", "content": "Hello, Claude!"}],
        "stream": false
      }'
-   
-
-
+   ```
 
 ## Key Features
 
@@ -155,12 +157,16 @@ serverless_genai_reference_architecture/
 
 ## Architecture Decisions
 
-See docs/ARCHITECTURE.md for detailed rationale on:
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed rationale on:
 - Why Lambda + API Gateway (vs. ECS/Fargate)?
 - Streaming implementation (chunked transfer encoding)
 - Cost tracking strategy
 - Authentication approaches
 - Scaling patterns
+
+## Well-Architected Review
+
+The deployed stack is audited against all six pillars of the AWS Well-Architected Framework. Findings, risk levels and remediation status are tracked in [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md).
 
 ## Cost Estimate
 
@@ -171,7 +177,7 @@ See docs/ARCHITECTURE.md for detailed rationale on:
 - CloudWatch (logs + metrics) — ~$1–2
 - **Total — ~$5–9 per million tokens**
 
-See docs/COST_ANALYSIS.md for detailed breakdown and cost optimization tips.
+See [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) for detailed breakdown and cost optimization tips.
 
 ## Exam Alignment (AWS Certified Generative AI Developer – Professional)
 
@@ -184,23 +190,22 @@ This build aligns with **AIP-C01 Domains 1 & 2:**
 
 ## What's Next
 
-**Cycle 2 (Oct 25–Nov 8):** Build #2 **RAG Knowledge Assistant** on top of this foundation.
-- Add OpenSearch for document retrieval[1:28 PM]- Implement prompt engineering for RAG patterns
-- Cost tracking for retrieval-augmented requests
-
-**Cycles 3–5:** Bedrock Agents, guardrails, advanced monitoring.
+This is the foundation for a series of builds that extend it into a complete GenAI platform on AWS:
+- **RAG** — Bedrock Knowledge Bases, embeddings, managed vector store
+- **Security & guardrails** — Bedrock Guardrails, VPC endpoints, KMS, invocation logging
+- **Agents** — Bedrock Agents / AgentCore with Lambda action groups
+- **Evaluation, monitoring & cost routing** — model evaluation, prompt caching, model routing
 
 ## Contributing
 
-This is a reference ar
-[1:28 PM]chitecture — feel free to fork, customize, and share improvements. Link back to this repo if you publish enhancements.
+This is a reference architecture — feel free to fork, customize, and share improvements. Link back to this repo if you publish enhancements.
 
 ## License
 
-MIT License — see LICENSE file.
+MIT License — see [LICENSE](LICENSE) file.
 
 ---
 
 **Questions?** See the docs or file an issue.
 
-**Want to learn more?** Start with docs/ARCHITECTURE.md or docs/DEPLOYMENT.md.
+**Want to learn more?** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) or [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
