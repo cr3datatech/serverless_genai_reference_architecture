@@ -12,6 +12,17 @@ This repository provides a reusable, enterprise-grade reference architecture for
 - Organizations evaluating Bedrock costs and performance
 - Learning AWS GenAI best practices (AWS Certified Generative AI Developer – Professional)
 
+## Start Here
+
+This repository is built to be learned from, not just deployed. Every design decision is explained and justified against the six pillars of the **AWS Well-Architected Framework** — Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization and Sustainability — and the finished stack is audited against them.
+
+| Read | To learn |
+|------|----------|
+| [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made, which Well-Architected pillar it serves, and how it maps to the AIP-C01 exam. Includes self-check questions |
+| [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order, architecture decisions (each tagged with its Well-Architected pillars), API contract and definition of done |
+| [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries — the Well-Architected Security pillar in practice |
+| [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
+
 ## Architecture
 
 ```
@@ -79,6 +90,8 @@ serverless_genai_reference_architecture/
 │   ├── utils.py                  # Token counting, cost calc, logging
 │   └── requirements.txt          # Python dependencies
 ├── docs/                         # Documentation
+│   ├── LEARNING_GUIDE.md         # Concepts, request flow, Well-Architected reasoning, exam mapping
+│   ├── BUILD_PLAN.md             # Build order and decisions, each mapped to Well-Architected pillars
 │   ├── ARCHITECTURE.md           # Detailed architecture & design decisions
 │   ├── DEPLOYMENT.md             # Step-by-step deployment guide
 │   ├── COST_ANALYSIS.md          # Bedrock pricing & optimization tips
