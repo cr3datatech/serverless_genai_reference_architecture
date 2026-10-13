@@ -29,6 +29,22 @@ policy/control/powerlab-boundary      ceiling for every workload role Terraform 
 - **`PassRole` only to Lambda and API Gateway**, and only for `powerlab-*` roles.
 - **No long-lived deploy credentials.** The user's access key can do nothing except assume a role with MFA, and role sessions expire.
 
+## Well-Architected alignment
+
+This bootstrap is the **Security pillar** of the AWS Well-Architected Framework applied before any workload exists — identity and permissions are much harder to fix after resources depend on them.
+
+| Control | Well-Architected practice it implements |
+|---------|-----------------------------------------|
+| Deploy and review run as **assumed roles** with expiring sessions | Use temporary credentials (`SEC02-BP02`) |
+| **MFA** required to assume either role | Use strong sign-in mechanisms |
+| Rights scoped to `powerlab-*` resources; review role is read-only | Grant least privilege access |
+| Separate deploy and review identities | Separation of duties — the auditor can't change what it audits |
+| **Permissions boundary** on every workload role | Establish permission guardrails; prevent privilege escalation |
+| Policies validated with IAM Access Analyzer before use | Analyse and reduce permissions continuously |
+| Everything defined as versioned JSON in this repo | Operational Excellence: infrastructure and policy as code |
+
+**Known trade-off:** the operator is an IAM user with a long-lived access key, which a Well-Architected review will flag. The risk is mitigated because the key alone can do nothing (MFA is required for every role). The stronger alternative is IAM Identity Center, which issues only temporary credentials. See the [Learning Guide §4.4](../../docs/LEARNING_GUIDE.md#44-iam-least-privilege-and-permissions-boundaries).
+
 ## Setup, step by step
 
 Run once, signed in to the AWS console as an administrator of the target account. Steps 1–5 run in **AWS CloudShell**, because the IAM console can't create roles and policies under the `/control/` path. Steps 6–8 are in the IAM console and on your own machine.
