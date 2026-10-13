@@ -14,7 +14,7 @@
       ],
       "Resource": "arn:aws:iam::*:role/powerlab-*",
       "Condition": {
-        "StringLike": {
+        "ArnLike": {
           "iam:PermissionsBoundary": "arn:aws:iam::*:policy/control/powerlab-boundary"
         }
       }

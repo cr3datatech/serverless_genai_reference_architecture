@@ -29,9 +29,43 @@ policy/control/powerlab-boundary      ceiling for every workload role Terraform 
 - **`PassRole` only to Lambda and API Gateway**, and only for `powerlab-*` roles.
 - **No long-lived deploy credentials.** The user's access key can do nothing except assume a role with MFA, and role sessions expire.
 
-## Setup
+## Setup, step by step
 
-Run as an administrator, from this folder, with Git Bash or any POSIX shell:
+Run once, signed in to the AWS console as an administrator of the target account. Steps 1–5 run in **AWS CloudShell**, because the IAM console can't create roles and policies under the `/control/` path. Steps 6–8 are in the IAM console and on your own machine.
+
+### 1. Open CloudShell
+
+Click the terminal icon (`>_`) in the console's top bar. The selected region doesn't matter, because IAM is global.
+
+### 2. Get the policy files
+
+```bash
+git clone <this-repo-url>
+cd <repo-folder>/bootstrap/iam
+ls    # four .json files and this README
+```
+
+### 3. Confirm the account
+
+```bash
+aws sts get-caller-identity
+```
+
+Check that `Account` is the account the stack should be deployed to.
+
+### 4. Validate the policies
+
+```bash
+for f in powerlab-deploy-policy.json powerlab-boundary-policy.json powerlab-user-policy.json; do
+  echo "== $f"
+  aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
+    --policy-document file://$f --query 'findings[].[findingType,issueCode,findingDetails]' --output text
+done
+```
+
+Nothing printed under a file name means IAM Access Analyzer found no issues. Fix any `ERROR` or `SECURITY_WARNING` before going on. A `SUGGESTION` is advisory.
+
+### 5. Create the policies, user and roles
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -43,10 +77,14 @@ aws iam create-policy --path /control/ --policy-name powerlab-boundary \
 aws iam create-policy --path /control/ --policy-name powerlab-deploy \
   --policy-document file://powerlab-deploy-policy.json
 
-# Operator user (enable an MFA device for it in the console afterwards)
+# Operator user
 aws iam create-user --user-name powerlab
 aws iam put-user-policy --user-name powerlab --policy-name assume-control-roles \
   --policy-document file://powerlab-user-policy.json
+
+# The trust policy names the new user; give IAM time to see it, or CreateRole
+# fails with "MalformedPolicyDocument: Invalid principal"
+aws iam wait user-exists --user-name powerlab && sleep 15
 
 # Control roles
 aws iam create-role --path /control/ --role-name powerlab-deploy \
@@ -60,11 +98,32 @@ aws iam attach-role-policy --role-name powerlab-review \
   --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess
 ```
 
-Then, in the console: **IAM → Users → powerlab → Security credentials** — assign an MFA device and create one access key for the CLI.
+Check the result:
 
-## CLI profiles
+```bash
+aws iam list-roles --path-prefix /control/ --query 'Roles[].Arn' --output text
+aws iam list-policies --scope Local --path-prefix /control/ --query 'Policies[].Arn' --output text
+```
 
-Add to `~/.aws/config` (your local machine only — never commit it):
+Expect two roles (`powerlab-deploy`, `powerlab-review`) and two policies (`powerlab-boundary`, `powerlab-deploy`).
+
+### 6. Add MFA and an access key (IAM console)
+
+1. **IAM → Users → powerlab → Security credentials.**
+2. **Multi-factor authentication → Assign MFA device.** Pick an authenticator app, scan the QR code and enter two consecutive codes. Note the device ARN (`arn:aws:iam::<account-id>:mfa/<device-name>`) for step 7.
+3. **Access keys → Create access key → Command Line Interface (CLI).** Copy the access key ID and secret now; the secret is shown only once. Don't paste them anywhere except step 7.
+
+The user has no console password and doesn't need one.
+
+### 7. Configure the CLI on your machine
+
+Store the access key:
+
+```bash
+aws configure --profile powerlab
+```
+
+Then add the role profiles to `~/.aws/config` (local machine only — never commit it):
 
 ```ini
 [profile powerlab]
@@ -83,10 +142,19 @@ mfa_serial     = arn:aws:iam::<account-id>:mfa/<device-name>
 region         = <region>
 ```
 
-Store the access key under `[powerlab]` with `aws configure --profile powerlab`. Check it works:
+### 8. Test
 
 ```bash
 aws sts get-caller-identity --profile powerlab-deploy   # prompts for an MFA code
+aws sts get-caller-identity --profile powerlab-review
+```
+
+Each should return an `assumed-role/powerlab-deploy/...` or `assumed-role/powerlab-review/...` ARN. These are expected to fail:
+
+```bash
+aws iam list-users --profile powerlab                     # AccessDenied: the user alone can do nothing
+aws iam delete-policy --profile powerlab-deploy \
+  --policy-arn arn:aws:iam::<account-id>:policy/control/powerlab-boundary   # AccessDenied: control plane protected
 ```
 
 ## Before the first deploy
