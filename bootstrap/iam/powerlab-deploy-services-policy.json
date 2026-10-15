@@ -20,29 +20,16 @@
       "Resource": "arn:aws:sns:*:*:powerlab-*"
     },
     {
-      "Sid": "CognitoCreateTaggedPool",
-      "Effect": "Allow",
-      "Action": [
-        "cognito-idp:CreateUserPool",
-        "cognito-idp:TagResource"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringEquals": {
-          "aws:RequestTag/Project": "powerlab"
-        }
-      }
-    },
-    {
-      "Sid": "CognitoManageTaggedPools",
+      "Sid": "CognitoManageLabPoolOnly",
       "Effect": "Allow",
       "Action": "cognito-idp:*",
-      "Resource": "arn:aws:cognito-idp:*:*:userpool/*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/Project": "powerlab"
-        }
-      }
+      "Resource": "arn:aws:cognito-idp:*:*:userpool/USER_POOL_ID"
+    },
+    {
+      "Sid": "NeverDeleteLabPool",
+      "Effect": "Deny",
+      "Action": "cognito-idp:DeleteUserPool",
+      "Resource": "*"
     },
     {
       "Sid": "CognitoReads",

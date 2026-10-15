@@ -100,7 +100,7 @@ The core deploy policy is unchanged. The additions below live in a second policy
 
 - **SNS:** create, delete, tag and subscribe on `topic:powerlab-*` (alarm notifications)
 - **Bedrock application inference profiles** (D13): `bedrock:CreateInferenceProfile`, `DeleteInferenceProfile`, `TagResource`, `UntagResource` on `application-inference-profile/*` (their ARNs contain generated IDs, so they can't be scoped by name)
-- **Cognito** (D2): user pool, resource server, app client and domain. User pool ARNs contain generated IDs rather than names, so access is scoped by the `aws:ResourceTag/Project` condition instead of by name
+- **Cognito** (D2): full control of **one** user pool, created by an administrator during bootstrap and named by its ID in the policy; no permission to create or delete pools. Cognito doesn't support resource-tag conditions, so tag-based scoping (the original plan) grants nothing - IAM Access Analyzer caught this. Terraform reads the pool ID from `terraform.tfvars` and manages the resource server, app clients and domain inside it
 
 ## Definition of done
 
