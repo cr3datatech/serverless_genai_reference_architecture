@@ -7,7 +7,7 @@ Designed to be safe in an **existing, shared account**: everything this stack cr
 ## What gets created
 
 ```
-user/powerlab                         operator — can only assume the two control roles, and only with MFA
+user/powerlab                         operator - can only assume the two control roles, and only with MFA
 role/control/powerlab-deploy          deploys the stack            ← powerlab-deploy-policy.json
 role/control/powerlab-review          Well-Architected review      ← AWS managed ReadOnlyAccess
 policy/control/powerlab-deploy        the deploy permissions
@@ -17,7 +17,7 @@ policy/control/powerlab-boundary      ceiling for every workload role Terraform 
 | File | Purpose |
 |------|---------|
 | `powerlab-deploy-policy.json` | Create/update/delete `powerlab-*` Lambda functions, API Gateway APIs, log groups, alarms, dashboards, IAM roles and policies; read and invoke Bedrock models; use the Terraform state bucket `powerlab-tfstate-*` |
-| `powerlab-boundary-policy.json` | Permissions boundary — the most any workload role can ever do: write its own logs, traces and `PowerLab*` metrics, and invoke Bedrock models |
+| `powerlab-boundary-policy.json` | Permissions boundary - the most any workload role can ever do: write its own logs, traces and `PowerLab*` metrics, and invoke Bedrock models |
 | `control-role-trust-policy.json` | Lets `user/powerlab` assume the control roles when signed in with MFA. `ACCOUNT_ID` is filled in at create time |
 | `powerlab-user-policy.json` | The user's only permission: `sts:AssumeRole` into `role/control/powerlab-*` with MFA |
 
@@ -31,14 +31,14 @@ policy/control/powerlab-boundary      ceiling for every workload role Terraform 
 
 ## Well-Architected alignment
 
-This bootstrap is the **Security pillar** of the AWS Well-Architected Framework applied before any workload exists — identity and permissions are much harder to fix after resources depend on them.
+This bootstrap is the **Security pillar** of the AWS Well-Architected Framework applied before any workload exists - identity and permissions are much harder to fix after resources depend on them.
 
 | Control | Well-Architected practice it implements |
 |---------|-----------------------------------------|
 | Deploy and review run as **assumed roles** with expiring sessions | Use temporary credentials (`SEC02-BP02`) |
 | **MFA** required to assume either role | Use strong sign-in mechanisms |
 | Rights scoped to `powerlab-*` resources; review role is read-only | Grant least privilege access |
-| Separate deploy and review identities | Separation of duties — the auditor can't change what it audits |
+| Separate deploy and review identities | Separation of duties - the auditor can't change what it audits |
 | **Permissions boundary** on every workload role | Establish permission guardrails; prevent privilege escalation |
 | Policies validated with IAM Access Analyzer before use | Analyse and reduce permissions continuously |
 | Everything defined as versioned JSON in this repo | Operational Excellence: infrastructure and policy as code |
@@ -139,7 +139,7 @@ Store the access key:
 aws configure --profile powerlab
 ```
 
-Then add the role profiles to `~/.aws/config` (local machine only — never commit it):
+Then add the role profiles to `~/.aws/config` (local machine only - never commit it):
 
 ```ini
 [profile powerlab]

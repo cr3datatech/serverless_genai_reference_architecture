@@ -18,7 +18,7 @@ This architecture is audited against the six pillars of the [AWS Well-Architecte
 | 🔴 **High (HRI)** | A plausible, near-term path to outage, breach, data loss, or material unplanned cost |
 | 🟠 **Medium (MRI)** | Real risk, but mitigated, bounded, or dependent on another failure first |
 | 🟡 **Low** | Best-practice deviation with limited practical impact |
-| 🟢 **None** | Practice met — recorded to show it was checked |
+| 🟢 **None** | Practice met - recorded to show it was checked |
 
 ## Scorecard
 
