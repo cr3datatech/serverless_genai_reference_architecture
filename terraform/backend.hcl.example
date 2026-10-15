@@ -1,5 +1,5 @@
 # Copy to backend.hcl (gitignored) and fill in. Used by:
-#   terraform init -backend-config=backend.hcl
+#   terraform init "-backend-config=backend.hcl"
 bucket       = "powerlab-tfstate-<unique-suffix>"
 key          = "genai-api/terraform.tfstate"
 region       = "<region>"

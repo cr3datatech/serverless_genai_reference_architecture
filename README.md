@@ -138,7 +138,7 @@ serverless_genai_reference_architecture/
 In short, once the account is set up:
 
 ```bash
-terraform -chdir=terraform init -backend-config=backend.hcl
+terraform -chdir=terraform init "-backend-config=backend.hcl"
 terraform -chdir=terraform plan -out=tfplan
 terraform -chdir=terraform apply tfplan
 ```

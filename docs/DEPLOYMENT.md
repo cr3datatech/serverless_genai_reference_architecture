@@ -6,7 +6,7 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 
 **Where to run the commands:** a **local terminal** (not CloudShell), in the **repository root**, and in the **same terminal window** throughout. The credentials loaded in step 2 exist only in that window.
 
-**About `terraform -chdir=terraform`:** Terraform reads the `.tf` files in its working directory, and this project keeps them in the `terraform/` subfolder. `-chdir=terraform` runs the command as if from inside that folder, so AWS CLI and Terraform commands can all run from the repository root. Equivalently, `cd terraform` once and drop the `-chdir=terraform` part (`terraform init -backend-config=backend.hcl`, `terraform plan -out=tfplan`, ...). Either way, `backend.hcl` and `tfplan` are read from and written to `terraform/`.
+**About `terraform -chdir=terraform`:** Terraform reads the `.tf` files in its working directory, and this project keeps them in the `terraform/` subfolder. `-chdir=terraform` runs the command as if from inside that folder, so AWS CLI and Terraform commands can all run from the repository root. Equivalently, `cd terraform` once and drop the `-chdir=terraform` part (`terraform init "-backend-config=backend.hcl"`, `terraform plan -out=tfplan`, ...). Either way, `backend.hcl` and `tfplan` are read from and written to `terraform/`.
 
 🏛️ **Well-Architected:** deployment is fully automated, repeatable and reversible (**Operational Excellence**: *perform operations as code*, *make frequent, small, reversible changes*). Credentials are temporary and MFA-backed (**Security**). Teardown is one command, so nothing is left running and billing (**Cost Optimization**, **Sustainability**).
 
@@ -83,7 +83,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
-| **Command** | `terraform -chdir=terraform init -backend-config=backend.hcl` |
+| **Command** | `terraform -chdir=terraform init "-backend-config=backend.hcl"` |
 | **Purpose** | Downloads the AWS provider (versions pinned by the committed `.terraform.lock.hcl`) and connects to the state bucket |
 | **Expected** | `Terraform has been successfully initialized!` |
 
@@ -91,6 +91,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `No positional arguments are expected` | Windows PowerShell 5.1 splits unquoted arguments that start with `-` and contain a `.`, so `-backend-config=backend.hcl` becomes `-backend-config=backend` plus `.hcl` | Keep the quotes: `"-backend-config=backend.hcl"`. PowerShell 7 (`winget install Microsoft.PowerShell`) doesn't have this behaviour |
 | `No valid credential sources found` | Step 2 not run in this terminal | Run step 2 |
 | `AccessDenied` / `403` on the bucket | Bucket name in `backend.hcl` doesn't match the one created, or a different identity | Compare names; check identity (step 2 check) |
 | `the given checksum does not match` | Lock file and provider download disagree (e.g. a new platform) | `terraform -chdir=terraform providers lock -platform=<os_arch>` and commit the updated lock file |

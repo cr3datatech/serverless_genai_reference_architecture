@@ -2,7 +2,7 @@
 # from a gitignored backend.hcl (see backend.hcl.example), so no bucket name or
 # account details live in this repository:
 #
-#   terraform init -backend-config=backend.hcl
+#   terraform init "-backend-config=backend.hcl"
 terraform {
   backend "s3" {}
 }
