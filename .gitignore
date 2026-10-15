@@ -13,7 +13,7 @@ notes/
 CLAUDE.local.md
 .claude/settings.local.json
 .mcp.json
-# Raw Well-Architected assessment output (account IDs, ARNs) — only the sanitised summary in docs/ is public
+# Raw Well-Architected assessment output (account IDs, ARNs) - only the sanitised summary in docs/ is public
 assessments/
 wa-evidence/
 

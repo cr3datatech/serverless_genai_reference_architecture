@@ -2,7 +2,7 @@
 
 How this reference architecture is built, in order, and the decisions behind it. Every decision names the **AWS Well-Architected Framework** pillar(s) it serves, and the finished stack is reviewed against all six pillars before release ([WELL_ARCHITECTED_REVIEW.md](WELL_ARCHITECTED_REVIEW.md)).
 
-New to these services? Read the [Learning Guide](LEARNING_GUIDE.md) first — it explains each component and concept this plan relies on.
+New to these services? Read the [Learning Guide](LEARNING_GUIDE.md) first - it explains each component and concept this plan relies on.
 
 ## Goal
 
@@ -88,7 +88,7 @@ Each phase ends with something deployed and testable, and names the Well-Archite
 | 3 | **Streaming path** | `ConverseStream` with response streaming through API Gateway; final usage event; timeout and disconnect handling | Performance Efficiency (time to first token), Reliability (timeouts) |
 | 4 | **Observability and cost** | Structured JSON logs; X-Ray on API Gateway and Lambda; EMF metrics (tokens, cost, latency by model); access logs; dashboard; alarms (5xx rate, Lambda errors, throttles, p95 latency, daily estimated cost) to an SNS topic | Operational Excellence, Cost Optimization (visibility, alarms) |
 | 5 | **Tests, examples, docs** | Unit tests (Bedrock stubbed); integration test against the deployed stage; `examples/` (Python client, curl); `ARCHITECTURE.md`, `DEPLOYMENT.md`, `API_REFERENCE.md`, `COST_ANALYSIS.md` (current Bedrock prices); README corrected to current models and features | Operational Excellence (tests, runbooks), Cost (current pricing) |
-| 6 | **Well-Architected review** | Read-only six-pillar assessment of the deployed stack (scoped to `Project=powerlab`), fixes, re-assessment; sanitised results in `WELL_ARCHITECTED_REVIEW.md` | All six pillars — evidence-based review, remediation, re-review |
+| 6 | **Well-Architected review** | Read-only six-pillar assessment of the deployed stack (scoped to `Project=powerlab`), fixes, re-assessment; sanitised results in `WELL_ARCHITECTED_REVIEW.md` | All six pillars - evidence-based review, remediation, re-review |
 | 7 | **Release** | Tagged `v1.0`, architecture diagram, write-up ("the minimal secure pattern for a GenAI endpoint on AWS"), `terraform destroy` verified clean | Operational Excellence (clean teardown), Sustainability (no leftovers) |
 
 ## Deploy policy v2 (likely additions)

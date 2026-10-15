@@ -14,13 +14,13 @@ This repository provides a reusable, enterprise-grade reference architecture for
 
 ## Start Here
 
-This repository is built to be learned from, not just deployed. Every design decision is explained and justified against the six pillars of the **AWS Well-Architected Framework** — Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization and Sustainability — and the finished stack is audited against them.
+This repository is built to be learned from, not just deployed. Every design decision is explained and justified against the six pillars of the **AWS Well-Architected Framework** - Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization and Sustainability - and the finished stack is audited against them.
 
 | Read | To learn |
 |------|----------|
 | [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made, which Well-Architected pillar it serves, and how it maps to the AIP-C01 exam. Includes self-check questions |
 | [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order, architecture decisions (each tagged with its Well-Architected pillars), API contract and definition of done |
-| [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries — the Well-Architected Security pillar in practice |
+| [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Well-Architected Security pillar in practice |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
 
 ## Architecture
@@ -65,12 +65,12 @@ This repository is built to be learned from, not just deployed. Every design dec
 ```
 
 **Key Components:**
-- **API Gateway** — RESTful HTTP endpoint with authentication (Cognito/API keys)
-- **Lambda** — Stateless compute layer that calls Bedrock Converse API
-- **Bedrock Converse API** — Foundation model invocation (streaming + non-streaming)
-- **IAM** — Fine-grained permissions for Lambda → Bedrock
-- **CloudWatch** — Logs, metrics, cost analysis
-- **X-Ray** — End-to-end request tracing for performance debugging
+- **API Gateway** - RESTful HTTP endpoint with authentication (Cognito/API keys)
+- **Lambda** - Stateless compute layer that calls Bedrock Converse API
+- **Bedrock Converse API** - Foundation model invocation (streaming + non-streaming)
+- **IAM** - Fine-grained permissions for Lambda → Bedrock
+- **CloudWatch** - Logs, metrics, cost analysis
+- **X-Ray** - End-to-end request tracing for performance debugging
 
 ## What's Included
 
@@ -152,21 +152,21 @@ serverless_genai_reference_architecture/
 
 ## Key Features
 
-:white_check_mark: **Streaming responses** — Long-running requests don't timeout; responses stream to clients in real-time
+:white_check_mark: **Streaming responses** - Long-running requests don't timeout; responses stream to clients in real-time
 
-:white_check_mark: **Cost observability** — Token counting + real-time cost estimation per request (CloudWatch metrics)
+:white_check_mark: **Cost observability** - Token counting + real-time cost estimation per request (CloudWatch metrics)
 
-:white_check_mark: **Model flexibility** — Switch between Bedrock models (Claude, Llama, Mistral, etc.) without code changes
+:white_check_mark: **Model flexibility** - Switch between Bedrock models (Claude, Llama, Mistral, etc.) without code changes
 
-:white_check_mark: **Authentication** — API key validation + optional Cognito integration for enterprise IAM
+:white_check_mark: **Authentication** - API key validation + optional Cognito integration for enterprise IAM
 
-:white_check_mark: **Error handling** — Graceful degradation, retry logic, detailed error messages
+:white_check_mark: **Error handling** - Graceful degradation, retry logic, detailed error messages
 
-:white_check_mark: **Observability** — CloudWatch Logs, X-Ray tracing, custom metrics for latency & cost
+:white_check_mark: **Observability** - CloudWatch Logs, X-Ray tracing, custom metrics for latency & cost
 
-:white_check_mark: **Security** — IAM least-privilege, VPC endpoint support, encrypted CloudWatch logs
+:white_check_mark: **Security** - IAM least-privilege, VPC endpoint support, encrypted CloudWatch logs
 
-:white_check_mark: **Terraform modules** — Reusable, production-ready, easy to fork and customize
+:white_check_mark: **Terraform modules** - Reusable, production-ready, easy to fork and customize
 
 ## Architecture Decisions
 
@@ -184,11 +184,11 @@ The deployed stack is audited against all six pillars of the AWS Well-Architecte
 ## Cost Estimate
 
 **Per 1M tokens (typical month):**
-- Bedrock (Claude 3 Sonnet) — ~$3–5
-- Lambda (compute) — <$1
-- API Gateway — <$1
-- CloudWatch (logs + metrics) — ~$1–2
-- **Total — ~$5–9 per million tokens**
+- Bedrock (Claude 3 Sonnet) - ~$3–5
+- Lambda (compute) - <$1
+- API Gateway - <$1
+- CloudWatch (logs + metrics) - ~$1–2
+- **Total - ~$5–9 per million tokens**
 
 See [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) for detailed breakdown and cost optimization tips.
 
@@ -204,18 +204,18 @@ This build aligns with **AIP-C01 Domains 1 & 2:**
 ## What's Next
 
 This is the foundation for a series of builds that extend it into a complete GenAI platform on AWS:
-- **RAG** — Bedrock Knowledge Bases, embeddings, managed vector store
-- **Security & guardrails** — Bedrock Guardrails, VPC endpoints, KMS, invocation logging
-- **Agents** — Bedrock Agents / AgentCore with Lambda action groups
-- **Evaluation, monitoring & cost routing** — model evaluation, prompt caching, model routing
+- **RAG** - Bedrock Knowledge Bases, embeddings, managed vector store
+- **Security & guardrails** - Bedrock Guardrails, VPC endpoints, KMS, invocation logging
+- **Agents** - Bedrock Agents / AgentCore with Lambda action groups
+- **Evaluation, monitoring & cost routing** - model evaluation, prompt caching, model routing
 
 ## Contributing
 
-This is a reference architecture — feel free to fork, customize, and share improvements. Link back to this repo if you publish enhancements.
+This is a reference architecture - feel free to fork, customize, and share improvements. Link back to this repo if you publish enhancements.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) file.
+MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
