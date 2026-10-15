@@ -18,7 +18,7 @@ policy/control/powerlab-boundary      ceiling for every workload role Terraform 
 | File | Purpose |
 |------|---------|
 | `powerlab-deploy-policy.json` | Create/update/delete `powerlab-*` Lambda functions, API Gateway APIs, log groups, alarms, dashboards, IAM roles and policies; read and invoke Bedrock models; use the Terraform state bucket `powerlab-tfstate-*` |
-| `powerlab-deploy-services-policy.json` | Additions for specific features: SNS topics `powerlab-*` for alarm emails; Amazon Cognito user pools **tagged `Project=powerlab`** for client sign-in; Bedrock application inference profiles for per-stack model cost tracking. Kept separate because IAM caps a managed policy at 6,144 characters, and so each feature's permissions are easy to review |
+| `powerlab-deploy-services-policy.json` | Additions for specific features: SNS topics `powerlab-*` for alarm emails; **one** Amazon Cognito user pool (the lab's, created by an administrator; `USER_POOL_ID` is filled in at create time) for client sign-in; Bedrock application inference profiles for per-stack model cost tracking. Kept separate because IAM caps a managed policy at 6,144 characters, and so each feature's permissions are easy to review |
 | `powerlab-boundary-policy.json` | Permissions boundary - the most any workload role can ever do: write its own logs, traces and `PowerLab*` metrics, and invoke Bedrock models |
 | `control-role-trust-policy.json` | Lets `user/powerlab` assume the control roles when signed in with MFA. `ACCOUNT_ID` is filled in at create time |
 | `powerlab-user-policy.json` | The user's only permission: `sts:AssumeRole` into `role/control/powerlab-*` with MFA |
@@ -94,8 +94,13 @@ aws iam create-policy --path /control/ --policy-name powerlab-boundary \
   --policy-document file://powerlab-boundary-policy.json
 aws iam create-policy --path /control/ --policy-name powerlab-deploy \
   --policy-document file://powerlab-deploy-policy.json
+
+# The lab's Cognito user pool, in the deployment region (see "Why the user pool is created here")
+REGION=<deployment-region>
+POOL_ID=$(aws cognito-idp create-user-pool --region "$REGION" --pool-name powerlab-clients --user-pool-tier LITE --user-pool-tags Project=powerlab --query 'UserPool.Id' --output text)
+echo "$POOL_ID"    # keep this - it goes in terraform.tfvars
 aws iam create-policy --path /control/ --policy-name powerlab-deploy-services \
-  --policy-document file://powerlab-deploy-services-policy.json
+  --policy-document "$(sed "s/USER_POOL_ID/$POOL_ID/" powerlab-deploy-services-policy.json)"
 
 # Operator user
 aws iam create-user --user-name powerlab
@@ -185,6 +190,14 @@ aws iam delete-policy --profile powerlab-deploy \
 - **API Gateway CloudWatch role.** REST API logging uses one CloudWatch role for the whole account and region. The deploy role can read this setting but deliberately can't change it, so it doesn't overwrite a role other workloads rely on. If it isn't set yet, an administrator sets it once.
 - **Terraform state bucket.** The deploy role can create and use a bucket named `powerlab-tfstate-<unique-suffix>`. The deploy steps cover this.
 
+## Why the user pool is created here
+
+Amazon Cognito doesn't support resource-tag conditions in IAM policies, and user pool ARNs contain generated IDs rather than names. So a deploy role can't be limited to "pools tagged `Project=powerlab`" or "pools named `powerlab-*`"; the only alternatives are *every* pool in the account, or *one specific* pool. In a shared account, every pool is too much.
+
+So an administrator creates the lab's pool once, here, and the deploy policy names that pool's ID. The deploy role can manage what's *inside* that pool (the API scope, client apps, sign-in domain), which Terraform creates and destroys. It can't create other pools, touch any other pool, or delete this one. It's the same pattern as the IAM roles: shared foundations belong to the administrator, and the workload gets least-privilege access to them.
+
+The pool uses the **Lite** feature tier, the cheapest one; machine-to-machine sign-in is billed per token issued regardless of tier.
+
 ## Updating an existing setup
 
 When a later version of this repo changes the policies, an administrator applies the change in CloudShell after `git pull`. Validate first (step 4), then:
@@ -200,8 +213,9 @@ aws iam create-policy-version --set-as-default \
   --policy-document file://powerlab-deploy-policy.json
 
 # A policy that is new in this version: create it and attach it to the role.
+# (powerlab-deploy-services first needs the lab user pool - see step 5.)
 aws iam create-policy --path /control/ --policy-name powerlab-deploy-services \
-  --policy-document file://powerlab-deploy-services-policy.json
+  --policy-document "$(sed "s/USER_POOL_ID/$POOL_ID/" powerlab-deploy-services-policy.json)"
 aws iam attach-role-policy --role-name powerlab-deploy \
   --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/control/powerlab-deploy-services"
 ```
