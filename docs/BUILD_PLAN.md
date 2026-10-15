@@ -85,7 +85,7 @@ Each phase ends with something deployed and testable, and names the Well-Archite
 
 | # | Phase | Delivers | 🏛️ Well-Architected focus |
 |---|-------|----------|----------|
-| 0 | **Prerequisites** | AWS Budget created ([bootstrap/budget](../bootstrap/budget/README.md)); D2/D3 decided (done); deploy policy v2 applied if needed; Claude models confirmed in Bedrock in the deployment region; API Gateway account CloudWatch role checked (`aws apigateway get-account`) | Security (model access, account-wide settings understood) |
+| 0 | **Prerequisites** | All [preflight checks](PREFLIGHT_CHECKS.md) pass; AWS Budget created ([bootstrap/budget](../bootstrap/budget/README.md)); D2/D3 decided (done); deploy policy v2 applied if needed; Claude models confirmed in Bedrock in the deployment region; API Gateway account CloudWatch role checked (`aws apigateway get-account`) | Security (model access, account-wide settings understood) |
 | 1 | **Terraform foundation** | State bucket, `backend.hcl` (gitignored), providers, `default_tags`, `terraform.tfvars.example`; Lambda execution role with `permissions_boundary`; inline policy limited to Bedrock invoke on the allowlisted profiles, plus logs and X-Ray | Security (boundary, least privilege), Operational Excellence (IaC, tagging) |
 | 2 | **Non-streaming path** | Lambda Converse handler (validation, alias resolution, usage and cost); REST API `/v1/chat`, `/v1/models`; API key and usage plan; authorizer (D2); first end-to-end `curl` | Security (authentication), Cost (usage plans), Reliability (error mapping) |
 | 3 | **Streaming path** | `ConverseStream` with response streaming through API Gateway; final usage event; timeout and disconnect handling | Performance Efficiency (time to first token), Reliability (timeouts) |
