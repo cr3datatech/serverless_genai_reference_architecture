@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+aws_region = "<region>"
+
+# Alias -> system-defined inference profile. Use profiles from your region's
+# geography (list them with `aws bedrock list-inference-profiles`). A
+# geographic prefix such as "eu." keeps requests inside that geography;
+# "global." profiles may route anywhere.
+models = {
+  fast     = { source_inference_profile_id = "<geo>.anthropic.claude-haiku-5-5" }
+  balanced = { source_inference_profile_id = "<geo>.anthropic.claude-sonnet-5-5" }
+  best     = { source_inference_profile_id = "<geo>.anthropic.claude-opus-5-5" }
+}
