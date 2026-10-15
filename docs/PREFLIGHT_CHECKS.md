@@ -302,7 +302,24 @@ Run check 6.2 once **for each model** used by an alias (`fast`, `balanced`, `bes
 | **Purpose** | Shows which access requirement is missing: provider agreement, authorisation, Marketplace entitlement or regional availability |
 | **Expected once enabled** | Every status is `AVAILABLE` or `AUTHORIZED` |
 
-**Steps to enable**
+**Reading the diagnosis**
+
+| Field | If not `AVAILABLE` / `AUTHORIZED` |
+|---|---|
+| `authorizationStatus` | The provider's use-case form hasn't been accepted: submit it in the console (steps below) |
+| `agreementAvailability` | No model agreement has been accepted yet. If an offer exists (next table), accept it from the CLI |
+| `entitlementAvailability` | The account can't subscribe to this model (account plan, organisation policy or billing); see *Common errors* |
+| `regionAvailability` | The model isn't offered in this region; choose another region or model |
+
+**Accept the agreement from the CLI** (administrator; CloudShell). Accepting subscribes the account to the model through AWS Marketplace at standard pay-per-token prices, with no upfront or monthly fee.
+
+| Step | Command | Expected |
+|---|---|---|
+| Is there an offer? | `aws bedrock list-foundation-model-agreement-offers --region <region> --model-id anthropic.<model> --query 'offers[].offerId' --output text` | An offer ID such as `offer-...`. Empty means no offer: see *Common errors* |
+| Accept the offers for every alias's model | `for m in <model-1> <model-2> <model-3>; do t=$(aws bedrock list-foundation-model-agreement-offers --region <region> --model-id anthropic.$m --query 'offers[0].offerToken' --output text); echo "== $m"; aws bedrock create-foundation-model-agreement --region <region> --model-id anthropic.$m --offer-token "$t" --output text; done` | The model ID echoed back for each model |
+| Wait for activation | `for m in <model-1> <model-2> <model-3>; do echo "$m $(aws bedrock get-foundation-model-availability --region <region> --model-id anthropic.$m --query agreementAvailability.status --output text)"; done` | `PENDING`, then `AVAILABLE` within a few minutes |
+
+**Or enable through the console**
 
 1. Console region → the deployment region.
 2. **Amazon Bedrock → Model catalog** → filter provider **Anthropic** → open the model.
@@ -316,6 +333,9 @@ Run check 6.2 once **for each model** used by an alias (`fast`, `balanced`, `bes
 |---|---|---|
 | Playground shows an access or subscription error | The account (or its AWS Organization) restricts Marketplace subscriptions, e.g. by an SCP | An organization administrator must allow `aws-marketplace:Subscribe` for the model |
 | Still `not available for this account` after enabling | Subscription not yet active | Wait 5-15 minutes and retry |
+| `agreementAvailability: NOT_AVAILABLE` even after using the Playground | The Playground step didn't create the agreement | Accept the offer from the CLI (above) |
+| `ConflictException` on `create-foundation-model-agreement` | The agreement already exists | Nothing to do; check the status |
+| No offers listed for any model | The account isn't eligible: commonly an account on the AWS **Free plan** (which excludes third-party Marketplace models), an organisation policy blocking Marketplace, or a missing payment method | Upgrade to the Paid plan (Billing console), ask the organisation administrator, or add a payment method |
 | `Unknown options` / `Invalid choice` for `get-foundation-model-availability` | Older CLI | Use the console steps; upgrade the CLI (check 1.1) |
 
 ---
