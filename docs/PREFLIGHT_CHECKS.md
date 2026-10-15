@@ -284,12 +284,39 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `AccessDeniedException: ... don't have access to the model` | The provider's one-time access requirement isn't met (for Anthropic models, a use-case form) | Bedrock console → Model catalog → open the model → complete the request as an administrator; retry after a few minutes |
+| `AccessDeniedException: ... don't have access to the model`, or `... <model> is not available for this account` | Model access isn't enabled for the account. This is an account-level gate, not IAM: third-party models need a one-time provider agreement (for Anthropic, a use-case form) and an AWS Marketplace subscription, **per model** | See [6.3](#63-enable-model-access) |
 | `AccessDeniedException: ... not authorized to perform: bedrock:InvokeModel` | IAM, not model access | Check the `BedrockInvokeForTesting` statement covers both `foundation-model/*` and `inference-profile/*` |
 | `ValidationException: Invocation of model ID ... with on-demand throughput isn't supported` | A bare model ID was used instead of an inference profile ID | Use an ID from check 6.1 (with the geographic prefix) |
 | `ResourceNotFoundException` | Typo in the ID, or the profile isn't available in this region | Copy the ID exactly from check 6.1 |
 | `ThrottlingException` | Account quota for that model reached | Wait and retry; persistent throttling means requesting a quota increase (Service Quotas → Amazon Bedrock) |
 | PowerShell error about the `--messages` JSON | Older PowerShell versions strip the inner quotes | Run the same line in Git Bash, or upgrade to PowerShell 7.3+ |
+
+Run check 6.2 once **for each model** used by an alias (`fast`, `balanced`, `best`). Access is granted per model, so one success doesn't prove the others.
+
+### 6.3 Enable model access
+
+| | |
+|---|---|
+| **Where** | AWS console (administrator), in the deployment region; the diagnosis command can run in CloudShell |
+| **Diagnose** | `aws bedrock get-foundation-model-availability --region <region> --model-id anthropic.<model>` (the model ID is the inference profile ID without its geographic prefix, e.g. `anthropic.claude-haiku-5-5`) |
+| **Purpose** | Shows which access requirement is missing: provider agreement, authorisation, Marketplace entitlement or regional availability |
+| **Expected once enabled** | Every status is `AVAILABLE` or `AUTHORIZED` |
+
+**Steps to enable**
+
+1. Console region → the deployment region.
+2. **Amazon Bedrock → Model catalog** → filter provider **Anthropic** → open the model.
+3. If prompted for **use-case details**, submit the form. It is per account and covers that provider's models.
+4. Open the model in the **Playground** and send one message. First use creates the AWS Marketplace subscription, which can take a few minutes to become active.
+5. Repeat step 4 for every model an alias uses, then re-run check 6.2 for each.
+
+**Common errors**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Playground shows an access or subscription error | The account (or its AWS Organization) restricts Marketplace subscriptions, e.g. by an SCP | An organization administrator must allow `aws-marketplace:Subscribe` for the model |
+| Still `not available for this account` after enabling | Subscription not yet active | Wait 5-15 minutes and retry |
+| `Unknown options` / `Invalid choice` for `get-foundation-model-availability` | Older CLI | Use the console steps; upgrade the CLI (check 1.1) |
 
 ---
 
@@ -300,6 +327,7 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 | Repository missing in CloudShell | CloudShell keeps a separate home folder per region. Switch the console to the region used before, or clone again: `git clone <this-repo-url>` |
 | `git pull` refuses because of local changes | A file was edited in CloudShell. Discard it (the repository has the fix): `git checkout -- <file>`, then `git pull` |
 | Stray file with a name like `iam attach-role-policy ...` | A multi-line paste was split wrongly and part of a command was taken as a filename. Preview with `git clean -n`, then remove with `git clean -f` |
+| `InvalidInput: ARN arn:aws:iam::{ "UserId": ... }:policy/... is not valid` | `ACCOUNT_ID` holds the full JSON from `get-caller-identity` instead of the account number (the `--query Account --output text` part was left off). Reset it and check before use: `ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text); echo "$ACCOUNT_ID"` should print 12 digits only |
 | `ACCOUNT_ID` or `POOL_ID` empty after a restart | Shell variables don't survive a CloudShell restart: `ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)`, and check 3.2 for the pool ID |
 | `MalformedPolicyDocument: Invalid principal` on `create-role` | The role's trust policy names a user that IAM can't see yet (eventual consistency). Wait about 15 seconds and retry; the bootstrap steps include this wait |
 
@@ -320,6 +348,7 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 | 4.1–4.3 | Budget | Amount, four alerts, real recipient |
 | 5.1 | API Gateway logging role | An ARN (or set once by an administrator) |
 | 6.1 | Claude profiles | At least one `<geo>.anthropic...` `ACTIVE` |
-| 6.2 | Model call | `hello` |
+| 6.2 | Model call | `hello`, for **each** alias's model |
+| 6.3 | Model access | Enabled for every model an alias uses |
 
 When every row passes, the account is ready for Phase 1 of the [build plan](BUILD_PLAN.md).
