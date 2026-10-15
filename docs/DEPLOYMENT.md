@@ -2,7 +2,11 @@
 
 How to deploy, verify and remove the stack. Run the [preflight checks](PREFLIGHT_CHECKS.md) first; every command here assumes they pass.
 
-Each step lists the **command**, its **purpose**, the **expected result** and **common errors**. Commands run in a **local terminal** from the repository root unless stated otherwise. Placeholders in angle brackets must be replaced with your own values.
+Each step lists the **command**, its **purpose**, the **expected result** and **common errors**. Placeholders in angle brackets must be replaced with your own values.
+
+**Where to run the commands:** a **local terminal** (not CloudShell), in the **repository root**, and in the **same terminal window** throughout. The credentials loaded in step 2 exist only in that window.
+
+**About `terraform -chdir=terraform`:** Terraform reads the `.tf` files in its working directory, and this project keeps them in the `terraform/` subfolder. `-chdir=terraform` runs the command as if from inside that folder, so AWS CLI and Terraform commands can all run from the repository root. Equivalently, `cd terraform` once and drop the `-chdir=terraform` part (`terraform init -backend-config=backend.hcl`, `terraform plan -out=tfplan`, ...). Either way, `backend.hcl` and `tfplan` are read from and written to `terraform/`.
 
 🏛️ **Well-Architected:** deployment is fully automated, repeatable and reversible (**Operational Excellence**: *perform operations as code*, *make frequent, small, reversible changes*). Credentials are temporary and MFA-backed (**Security**). Teardown is one command, so nothing is left running and billing (**Cost Optimization**, **Sustainability**).
 
@@ -38,6 +42,8 @@ Terraform can't prompt for an MFA code, so the AWS CLI performs the MFA sign-in 
 | **Purpose** | Sets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` for this terminal only. Nothing is written to disk |
 | **Expected** | An MFA prompt (unless a cached session is still valid), then no output |
 | **Check** | `aws sts get-caller-identity --query Arn --output text` (no `--profile`) prints `...assumed-role/powerlab-deploy/...` |
+
+**Why not just set `AWS_PROFILE`?** Setting `$env:AWS_PROFILE = "powerlab-deploy"` (PowerShell) or `export AWS_PROFILE=powerlab-deploy` (Bash) makes the AWS CLI use that profile without `--profile`, which is fine for CLI commands. Terraform, however, can't display the MFA prompt the profile requires and fails. Exporting credentials works for both the CLI and Terraform. To undo `AWS_PROFILE`: `Remove-Item Env:AWS_PROFILE` (PowerShell) or `unset AWS_PROFILE` (Bash). Don't set it to the bare `powerlab` profile: that identity can only assume roles, so every other command returns `AccessDenied`.
 
 **Common errors**
 

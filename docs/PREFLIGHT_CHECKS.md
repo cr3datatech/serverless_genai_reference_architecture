@@ -37,6 +37,35 @@ The `powerlab-*` profiles exist only in `~/.aws/config` on the local machine; Cl
 | Old version still reported after upgrading | The terminal was opened before the upgrade | Close it and open a new one |
 | Installer asks for an administrator password | Managed (work) machine | Ask IT, or run read-only checks in CloudShell in the meantime |
 
+### 1.2 Terraform version
+
+| | |
+|---|---|
+| **Where** | Local terminal |
+| **Command** | `terraform version` |
+| **Purpose** | The configuration requires Terraform 1.10 or later, for native S3 state locking (`use_lockfile`) |
+| **Expected** | `Terraform v1.10.0` or later |
+
+**Common errors**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Version below 1.10, or `Unsupported Terraform Core version` at `init` | Old Terraform | Upgrade with the tool that installed it. Chocolatey: `choco upgrade terraform -y` (administrator terminal). winget: `winget upgrade --id Hashicorp.Terraform`. Homebrew: `brew upgrade hashicorp/tap/terraform`. Otherwise download from [developer.hashicorp.com/terraform/install](https://developer.hashicorp.com/terraform/install). Then open a new terminal |
+| `terraform` not recognised | Not installed or not on `PATH` | Install as above |
+| `Unsupported argument ... use_lockfile` at `init` | Terraform older than 1.10 | Upgrade |
+
+Updating Terraform doesn't change the AWS provider version: that is pinned separately in the committed `.terraform.lock.hcl`.
+
+### 1.3 Node.js version
+
+| | |
+|---|---|
+| **Where** | Local terminal |
+| **Command** | `node --version` |
+| **Purpose** | Builds the TypeScript Lambda function (from phase 2) |
+| **Expected** | `v22.x` or later |
+| **If missing or older** | Install the current LTS from [nodejs.org](https://nodejs.org), or `winget install OpenJS.NodeJS.LTS` / `choco install nodejs-lts` / `brew install node` |
+
 ---
 
 ## 2. Identity and roles
@@ -279,6 +308,8 @@ The `powerlab-*` profiles exist only in `~/.aws/config` on the local machine; Cl
 | # | Check | Pass when |
 |---|-------|-----------|
 | 1.1 | CLI version | 2025 or later |
+| 1.2 | Terraform version | 1.10 or later |
+| 1.3 | Node.js version | 22 or later |
 | 2.1 | Deploy role | `assumed-role/powerlab-deploy/...` |
 | 2.2 | Review role | `assumed-role/powerlab-review/...` |
 | 2.3 | User alone | `AccessDenied` |
