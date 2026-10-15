@@ -21,6 +21,7 @@ This repository is built to be learned from, not just deployed. Every design dec
 | [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made, which Well-Architected pillar it serves, and how it maps to the AIP-C01 exam. Includes self-check questions |
 | [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order, architecture decisions (each tagged with its Well-Architected pillars), API contract and definition of done |
 | [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Well-Architected Security pillar in practice |
+| [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Well-Architected Cost Optimization pillar in practice, and why Bedrock model charges need special handling |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
 
 ## Architecture
@@ -76,7 +77,9 @@ This repository is built to be learned from, not just deployed. Every design dec
 
 ```
 serverless_genai_reference_architecture/
-├── bootstrap/iam/                # One-time least-privilege IAM setup (admin runs once)
+├── bootstrap/                    # One-time account setup (admin runs once)
+│   ├── iam/                      # Least-privilege operator roles + permissions boundary
+│   └── budget/                   # AWS Budget with email alerts
 ├── terraform/                    # Infrastructure as Code
 │   ├── main.tf                   # Main resource definitions
 │   ├── variables.tf              # Input variables
@@ -85,10 +88,10 @@ serverless_genai_reference_architecture/
 │   ├── api_gateway.tf            # API Gateway + auth
 │   ├── lambda.tf                 # Lambda function config
 │   └── terraform.tfvars.example  # Example variable values
-├── lambda/                       # Lambda function source
-│   ├── converse.py               # Bedrock Converse wrapper
-│   ├── utils.py                  # Token counting, cost calc, logging
-│   └── requirements.txt          # Python dependencies
+├── lambda/                       # Lambda function source (Node.js 22, TypeScript)
+│   ├── src/handler.ts            # Request validation, model alias resolution, Converse/ConverseStream
+│   ├── src/cost.ts               # Token usage → estimated cost, EMF metrics
+│   └── package.json              # Dependencies and build scripts
 ├── docs/                         # Documentation
 │   ├── LEARNING_GUIDE.md         # Concepts, request flow, Well-Architected reasoning, exam mapping
 │   ├── BUILD_PLAN.md             # Build order and decisions, each mapped to Well-Architected pillars
@@ -101,7 +104,7 @@ serverless_genai_reference_architecture/
 │   ├── python_client.py          # Python HTTP client
 │   └── curl_examples.sh          # cURL examples
 ├── tests/                        # Unit & integration tests
-│   ├── test_converse.py          # Lambda function tests
+│   ├── handler.test.ts           # Lambda unit tests (Bedrock stubbed)
 │   └── test_integration.py       # End-to-end tests
 ├── .gitignore
 ├── README.md                     # This file
@@ -112,8 +115,9 @@ serverless_genai_reference_architecture/
 
 ### Prerequisites
 - AWS Account with Bedrock access (Claude models)
-- Terraform >= 1.0
-- Python 3.11+
+- Terraform >= 1.10
+- Node.js 22+ (to build the Lambda function)
+- Python 3.11+ (example client and integration tests)
 - AWS CLI v2 configured with credentials
 
 ### Deploy

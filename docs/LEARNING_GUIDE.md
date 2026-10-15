@@ -80,21 +80,25 @@ Well-Architected deliberately produces **no numeric score**. It produces a list 
 Follow a single call to `POST /v1/chat`:
 
 ```
- ① Client ──HTTPS──► ② API Gateway ──► ③ Lambda ──► ④ Bedrock (Claude)
-                         │                 │              │
-                         ▼                 ▼              ▼
-                  ⑤ access log      ⑥ structured log   ⑦ token usage
-                     X-Ray trace       EMF metrics        returned to Lambda
-                     throttle check    X-Ray subsegment
+ ⓪ Client ──client ID + secret──► Cognito ──access token (≈1 h)──► Client
+                                                                     │
+ ① Client ──HTTPS + token + API key──► ② API Gateway ──► ③ Lambda ──► ④ Bedrock (Claude)
+                                           │                 │              │
+                                           ▼                 ▼              ▼
+                                    ⑥ access log      ⑤ structured log   token usage
+                                       X-Ray trace       EMF metrics      returned to Lambda
+                                       throttle check    X-Ray subsegment
 ```
 
-| Step | What happens | What can go wrong | 🏛️ Pillar |
-|---|---|---|---|
-| ① **Client** sends JSON with a model *alias* (`fast`, `balanced`, `best`), messages, and `stream` true/false, plus credentials | Wrong or missing credentials | Security |
-| ② **API Gateway** authenticates the caller, checks the API key against a **usage plan** (throttle + quota), validates basic request shape, then invokes Lambda | Over quota → `429`; unauthenticated → `401/403` | Security, Reliability, Cost |
-| ③ **Lambda** validates the body (size, `max_tokens` cap, allowed roles), resolves the alias to an **allowlisted model ID**, and calls the Bedrock **Converse** (or **ConverseStream**) API | Invalid input → `400`; unknown alias → `400` | Security, Cost |
-| ④ **Bedrock** runs the model. The request goes to an **inference profile** that may route it to another region in the same geography with spare capacity | Bedrock throttling → mapped to `429`; model not enabled → `500` with a safe message | Reliability, Performance |
-| ⑤⑥⑦ Lambda reads **token usage** from the response, multiplies by a price table to estimate cost, writes one structured log line that also carries **metrics** (EMF), and returns the answer (or streams it) | - | Operational Excellence, Cost |
+| Step | Component | What happens | What can go wrong | 🏛️ Pillar |
+|---|---|---|---|---|
+| ⓪ | **Client → Cognito** | Before calling the API, the client exchanges its client ID and secret for an **access token** (OAuth client-credentials flow). It reuses the token until it expires, about an hour later, so this happens rarely | Wrong secret → no token; the client can't call the API at all | Security, Cost |
+| ① | **Client** | Sends `POST /v1/chat` with the token (`Authorization: Bearer`), its API key (`x-api-key`), and a JSON body: a model *alias* (`fast`, `balanced`, `best`), messages, and `stream` true/false | Missing or expired token, missing API key | Security |
+| ② | **API Gateway** | The Cognito authorizer checks the token's signature, expiry and scope. API Gateway then checks the API key against its **usage plan** (throttle + quota), validates the basic request shape, and invokes Lambda | Bad token → `401`; wrong scope → `403`; over quota or throttled → `429` | Security, Reliability, Cost |
+| ③ | **Lambda** | Validates the body (size, `max_tokens` cap, allowed roles), resolves the alias to an **allowlisted model**, and calls the Bedrock **Converse** (or **ConverseStream**) API | Invalid input or unknown alias → `400` | Security, Cost |
+| ④ | **Bedrock** | Runs the model. The request goes through an **inference profile**, which may route it to another region in the same geography that has spare capacity | Bedrock throttling → mapped to `429`; model not enabled → `500` with a safe message | Reliability, Performance Efficiency |
+| ⑤ | **Lambda** | Reads **token usage** from the response, multiplies by a price table to estimate cost, writes one structured log line that also carries **metrics** (EMF), and returns the answer, or streams it word by word | A failure here mustn't lose the answer - logging problems are reported, not returned to the client | Operational Excellence, Cost |
+| ⑥ | **API Gateway** | Writes an access log entry and closes the X-Ray trace, so the request can be followed end to end by its request ID | - | Operational Excellence |
 
 The response includes the answer, token counts, an estimated cost, and a request ID that links the client's view to logs and traces.
 
@@ -145,6 +149,7 @@ The response includes the answer, token counts, an estimated cost, and a request
 | Lambda rather than containers (ECS/Fargate) | Operational Excellence, Cost Optimization, Sustainability | Requests are short and bursty; no servers or idle capacity; scales to zero |
 | **arm64 (Graviton)** | Cost Optimization, Sustainability | Lower price per GB-second and lower energy use for the same work |
 | **Reserved concurrency** cap | Cost Optimization, Reliability | Hard limit on simultaneous model calls - protects both the bill and the account's Bedrock quota |
+| **Node.js 22 + TypeScript** runtime | Performance Efficiency, Operational Excellence | The only managed runtime with native response streaming, so no extra adapter layer or container image to maintain; TypeScript's types catch request-shape mistakes before deploy. Python (the other common choice) would need the Lambda Web Adapter |
 | **Streaming** responses | Performance Efficiency | Users see the first words in about a second instead of waiting for the full answer; long answers don't hit request timeouts |
 | Minimal execution role, capped by a **permissions boundary** | Security | Even a mistaken policy can't give the function more than the boundary allows |
 
@@ -170,6 +175,8 @@ This project uses a **REST API**: it is the only option offering per-client usag
 - **Stage** - a named deployment of the API (for example `v1`) with its own settings, logs and throttles.
 - **Usage plan** - throttling (requests per second, burst) and quota (requests per day/month) attached to one or more **API keys**. API keys *identify and meter* clients; AWS guidance is not to rely on them as the only authentication.
 - **Authorizer** - the component that decides whether a caller is authenticated: IAM (SigV4 signed requests), Amazon Cognito (JWT tokens), or a custom Lambda function.
+- **OAuth client-credentials flow (machine-to-machine)** - how one program proves its identity to another with no human involved. The client holds a *client ID* and *client secret* issued by Amazon Cognito. It exchanges them at Cognito's token endpoint for a short-lived **access token** (a signed JWT, typically valid for an hour) and sends that token in the `Authorization: Bearer` header. API Gateway's Cognito authorizer checks the token's signature, expiry and *scope* before the request reaches Lambda. The secret never travels with API calls, and a stolen token expires on its own.
+- **Scopes** - named permissions inside a token (for example `genai/chat`). A client can only get tokens for the scopes it was granted, so different clients can be given different rights.
 - **Integration timeout** - non-streaming integrations have a maximum wait time; streaming integrations can run much longer.
 
 **Choices in this project and why**
@@ -177,7 +184,8 @@ This project uses a **REST API**: it is the only option offering per-client usag
 | Choice | 🏛️ Pillar | Reasoning |
 |---|---|---|
 | REST API with **usage plans** | Cost Optimization, Reliability | Per-client throttle and quota; one client can't starve others or run up cost |
-| **Real authentication** in addition to API keys (see [BUILD_PLAN.md](BUILD_PLAN.md) D2) | Security | API keys alone are identifiers, not credentials |
+| **Cognito machine-to-machine tokens** checked by a Cognito authorizer, *plus* an API key (see [BUILD_PLAN.md](BUILD_PLAN.md) D2) | Security, Cost Optimization | The token proves *who* is calling (authentication) and carries scopes (authorisation); the API key ties the caller to a usage plan (metering and limits). API keys alone are identifiers, not credentials. Cognito charges only per token issued and clients reuse tokens until expiry, so the cost is negligible |
+| Alternatives considered: IAM (SigV4) auth, API key only | Security | SigV4 is strong but requires every caller to hold AWS credentials; API key only would be flagged by a Well-Architected review. Both are recorded in [BUILD_PLAN.md](BUILD_PLAN.md) so the trade-off is visible |
 | **Access logging** and **X-Ray tracing** on the stage | Operational Excellence | Every request is recorded and traceable end to end |
 | **Stage-level throttling** as a global ceiling | Reliability, Cost Optimization | Protects the backend even if a usage plan is misconfigured |
 
@@ -295,6 +303,8 @@ Answer these without looking; the answers are in the sections above.
 10. Logging full prompts would make debugging easier. Which pillar argues against it, and how is the trade-off resolved here?
 11. Why is arm64 a Sustainability decision as well as a Cost decision?
 12. What is the difference between an HRI and an MRI, and what happens to each before release?
+13. In the client-credentials flow, what does the client send with each API call - the secret or the token? Why does that matter?
+14. Why does this design use *both* a Cognito token and an API key?
 
 ---
 
@@ -303,6 +313,8 @@ Answer these without looking; the answers are in the sections above.
 | Term | Meaning |
 |---|---|
 | **Alias (model)** | A stable name (`fast`, `balanced`, `best`) mapped server-side to a specific model ID |
+| **Client credentials (OAuth)** | A machine-to-machine sign-in: a client ID and secret are exchanged for a short-lived access token |
+| **JWT** | JSON Web Token - a signed, expiring token carrying identity and scopes; verified without calling back to the issuer |
 | **Converse / ConverseStream** | Bedrock's model-agnostic chat APIs, non-streaming and streaming |
 | **EMF** | Embedded Metric Format - log lines that CloudWatch turns into metrics |
 | **FM** | Foundation model - a large pre-trained model available through Bedrock |

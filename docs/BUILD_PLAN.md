@@ -25,8 +25,8 @@ RAG / knowledge bases · Bedrock Guardrails · VPC endpoints and customer-manage
 | # | Decision | Choice | 🏛️ Well-Architected | Why |
 |---|----------|--------|-----|-----|
 | D1 | API front door | **API Gateway REST API** (regional) | REL, COST, OPS | The only API Gateway type with API keys, usage plans (per-client throttling and quotas), native X-Ray tracing and WAF support. It now also supports **response streaming** with Lambda proxy integrations, which used to require Function URLs. HTTP APIs are cheaper but have no API keys, usage plans or streaming |
-| D2 | Client authentication | **Open, see below** | SEC | API keys identify and meter clients, but AWS advises against using them as the only authentication |
-| D3 | Lambda runtime | **Open, see below** | PERF, OPS | Native Lambda response streaming is only available on Node.js managed runtimes |
+| D2 | Client authentication | **Cognito machine-to-machine (OAuth client credentials) + API key** | SEC, COST | Callers prove identity with a short-lived JWT validated by a Cognito authorizer; the API key identifies the client for its usage plan (throttle and quota). API keys alone are identifiers, not credentials. Cognito charges only per token issued (no per-client fee), and clients reuse a token until it expires, so lab cost is negligible. See below |
+| D3 | Lambda runtime | **Node.js 22 + TypeScript** | PERF, OPS | Native Lambda response streaming exists only on Node.js managed runtimes; no extra layers or containers, fast cold starts. Python stays for the example client and integration tests. See below |
 | D4 | CPU architecture | **arm64 (Graviton)** | COST, SUS | About 20% cheaper per GB-second, and lower energy use (Cost and Sustainability pillars) |
 | D5 | Model selection | **Server-side aliases** (`fast`, `balanced`, `best`) mapped to an allowlist of Bedrock inference-profile IDs in Terraform variables | COST, SEC, OPS | Clients never send raw model IDs. Models change through configuration, not code, and an unapproved or expensive model can't be requested |
 | D6 | Model access | **Geographic cross-region inference profiles** matching the deployment region (e.g. `eu.`, `us.`, `apac.` prefixes) | REL, PERF, SEC | Current Claude models are reached through inference profiles in most regions. A geographic profile spreads load across regions for capacity while keeping requests inside that geography (data residency). Exact IDs are discovered at deploy time with `aws bedrock list-inference-profiles`, not hard-coded |
@@ -36,30 +36,33 @@ RAG / knowledge bases · Bedrock Guardrails · VPC endpoints and customer-manage
 | D10 | Terraform state | **S3 backend with native locking** (`use_lockfile`, Terraform ≥ 1.10), versioned and encrypted bucket `powerlab-tfstate-<suffix>`; backend settings in a gitignored `backend.hcl` | REL, SEC, OPS | No DynamoDB table needed, and no account details in the repo |
 | D11 | Tagging | Provider `default_tags`: `Project=powerlab`, `Component=genai-api`, `ManagedBy=terraform` | COST, OPS | Scopes the Well-Architected review to this stack in a shared account, and enables cost allocation |
 | D12 | Code layout | Flat Terraform root (one file per concern) rather than modules | OPS | Easier to read as a reference. Modules come when later builds reuse pieces |
+| D13 | Model cost attribution | Call Bedrock through **application inference profiles** created by Terraform, tagged `Project=powerlab`, each wrapping the geographic profile for one alias | COST, OPS | Third-party model charges are billed through AWS Marketplace and aren't tied to the calling Lambda's tags. Tagged application inference profiles make model spend attributable to this stack in Cost Explorer and tag-scoped budgets ([bootstrap/budget](../bootstrap/budget/README.md)). To be confirmed after the first deploy |
 
-### Open decisions
+### Decision records: options considered
 
-**D2: Authentication**
+**D2: Authentication** - *decided: A*
 
 | Option | How it works | Trade-off |
 |---|---|---|
-| **A. Cognito machine-to-machine + API key** (recommended) | Clients get a JWT through the OAuth client-credentials flow; API Gateway validates it with a Cognito authorizer. The API key is still required, for usage-plan metering | The realistic pattern for internal service-to-service APIs. Requires deploy policy v2 (Cognito permissions) |
+| **A. Cognito machine-to-machine + API key** (chosen) | Clients get a JWT through the OAuth client-credentials flow; API Gateway validates it with a Cognito authorizer. The API key is still required, for usage-plan metering | The realistic pattern for internal service-to-service APIs. Requires deploy policy v2 (Cognito permissions) |
 | B. IAM (SigV4) auth + API key | Clients sign requests with AWS credentials (`curl --aws-sigv4`, SDKs) | No new service and strong auth, but only clients with AWS credentials can call it |
 | C. API key only | `x-api-key` header | Simplest, but the Well-Architected review would flag it. Fine for a demo only |
 
-**D3: Lambda runtime and streaming**
+**D3: Lambda runtime and streaming** - *decided: A*
 
 | Option | How it works | Trade-off |
 |---|---|---|
-| **A. Node.js 22 + TypeScript** (recommended) | `awslambda.streamifyResponse` with `ConverseStreamCommand` from the AWS SDK v3 | Native streaming, no layers, fast cold starts. Python stays for the example client and test scripts |
+| **A. Node.js 22 + TypeScript** (chosen) | `awslambda.streamifyResponse` with `ConverseStreamCommand` from the AWS SDK v3 | Native streaming, no layers, fast cold starts. Python stays for the example client and test scripts |
 | B. Python 3.13 + Lambda Web Adapter | A small web app (FastAPI) with the AWS Lambda Web Adapter in `response_stream` mode | Keeps everything in Python (as the current README describes), but adds a public layer or container image. Both need extra deploy permissions and move parts |
+
+**Why record the rejected options?** Well-Architected reviews ask not just *what* was chosen but whether alternatives and trade-offs were considered (Operational Excellence: *make informed decisions*). Keeping the options here shows the reasoning and makes it easy to revisit if requirements change - for example, option B for D2 becomes attractive if every caller already has AWS credentials.
 
 ## API contract
 
 ```
 POST /v1/chat
 x-api-key: <key>
-Authorization: Bearer <jwt>        (if D2 = A)
+Authorization: Bearer <jwt>        (Cognito access token, client-credentials grant)
 
 {
   "model": "balanced",                         // alias, default "fast"
@@ -82,7 +85,7 @@ Each phase ends with something deployed and testable, and names the Well-Archite
 
 | # | Phase | Delivers | 🏛️ Well-Architected focus |
 |---|-------|----------|----------|
-| 0 | **Prerequisites** | D2/D3 decided; deploy policy v2 applied if needed; Claude models confirmed in Bedrock in the deployment region; API Gateway account CloudWatch role checked (`aws apigateway get-account`) | Security (model access, account-wide settings understood) |
+| 0 | **Prerequisites** | AWS Budget created ([bootstrap/budget](../bootstrap/budget/README.md)); D2/D3 decided (done); deploy policy v2 applied if needed; Claude models confirmed in Bedrock in the deployment region; API Gateway account CloudWatch role checked (`aws apigateway get-account`) | Security (model access, account-wide settings understood) |
 | 1 | **Terraform foundation** | State bucket, `backend.hcl` (gitignored), providers, `default_tags`, `terraform.tfvars.example`; Lambda execution role with `permissions_boundary`; inline policy limited to Bedrock invoke on the allowlisted profiles, plus logs and X-Ray | Security (boundary, least privilege), Operational Excellence (IaC, tagging) |
 | 2 | **Non-streaming path** | Lambda Converse handler (validation, alias resolution, usage and cost); REST API `/v1/chat`, `/v1/models`; API key and usage plan; authorizer (D2); first end-to-end `curl` | Security (authentication), Cost (usage plans), Reliability (error mapping) |
 | 3 | **Streaming path** | `ConverseStream` with response streaming through API Gateway; final usage event; timeout and disconnect handling | Performance Efficiency (time to first token), Reliability (timeouts) |
@@ -91,13 +94,13 @@ Each phase ends with something deployed and testable, and names the Well-Archite
 | 6 | **Well-Architected review** | Read-only six-pillar assessment of the deployed stack (scoped to `Project=powerlab`), fixes, re-assessment; sanitised results in `WELL_ARCHITECTED_REVIEW.md` | All six pillars - evidence-based review, remediation, re-review |
 | 7 | **Release** | Tagged `v1.0`, architecture diagram, write-up ("the minimal secure pattern for a GenAI endpoint on AWS"), `terraform destroy` verified clean | Operational Excellence (clean teardown), Sustainability (no leftovers) |
 
-## Deploy policy v2 (likely additions)
+## Deploy permissions for this build
 
-Kept in [bootstrap/iam](../bootstrap/iam/README.md) and applied by an administrator with `create-policy-version`.
+The core deploy policy is unchanged. The additions below live in a second policy, `powerlab-deploy-services`, because IAM caps one managed policy at 6,144 characters, and so each feature's permissions can be reviewed on their own ([bootstrap/iam](../bootstrap/iam/README.md#updating-an-existing-setup)).
 
 - **SNS:** create, delete, tag and subscribe on `topic:powerlab-*` (alarm notifications)
-- **Cognito** (if D2 = A): user pool, resource server, app client and domain. User pool ARNs contain generated IDs rather than names, so access is scoped by the `aws:ResourceTag/Project` condition instead of by name
-- **Lambda layers** (only if D3 = B): `lambda:GetLayerVersion` on the published Lambda Web Adapter layer
+- **Bedrock application inference profiles** (D13): `bedrock:CreateInferenceProfile`, `DeleteInferenceProfile`, `TagResource`, `UntagResource` on `application-inference-profile/*` (their ARNs contain generated IDs, so they can't be scoped by name)
+- **Cognito** (D2): user pool, resource server, app client and domain. User pool ARNs contain generated IDs rather than names, so access is scoped by the `aws:ResourceTag/Project` condition instead of by name
 
 ## Definition of done
 

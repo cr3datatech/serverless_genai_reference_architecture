@@ -1,0 +1,9 @@
+{
+  "BudgetName": "powerlab-account-monthly",
+  "BudgetLimit": {
+    "Amount": "AMOUNT_USD",
+    "Unit": "USD"
+  },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}

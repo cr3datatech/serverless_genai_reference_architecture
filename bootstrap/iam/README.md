@@ -8,15 +8,17 @@ Designed to be safe in an **existing, shared account**: everything this stack cr
 
 ```
 user/powerlab                         operator - can only assume the two control roles, and only with MFA
-role/control/powerlab-deploy          deploys the stack            ← powerlab-deploy-policy.json
+role/control/powerlab-deploy          deploys the stack            ← powerlab-deploy + powerlab-deploy-services
 role/control/powerlab-review          Well-Architected review      ← AWS managed ReadOnlyAccess
-policy/control/powerlab-deploy        the deploy permissions
+policy/control/powerlab-deploy        core deploy permissions
+policy/control/powerlab-deploy-services  feature additions (alarms, sign-in, model cost tags)
 policy/control/powerlab-boundary      ceiling for every workload role Terraform creates
 ```
 
 | File | Purpose |
 |------|---------|
 | `powerlab-deploy-policy.json` | Create/update/delete `powerlab-*` Lambda functions, API Gateway APIs, log groups, alarms, dashboards, IAM roles and policies; read and invoke Bedrock models; use the Terraform state bucket `powerlab-tfstate-*` |
+| `powerlab-deploy-services-policy.json` | Additions for specific features: SNS topics `powerlab-*` for alarm emails; Amazon Cognito user pools **tagged `Project=powerlab`** for client sign-in; Bedrock application inference profiles for per-stack model cost tracking. Kept separate because IAM caps a managed policy at 6,144 characters, and so each feature's permissions are easy to review |
 | `powerlab-boundary-policy.json` | Permissions boundary - the most any workload role can ever do: write its own logs, traces and `PowerLab*` metrics, and invoke Bedrock models |
 | `control-role-trust-policy.json` | Lets `user/powerlab` assume the control roles when signed in with MFA. `ACCOUNT_ID` is filled in at create time |
 | `powerlab-user-policy.json` | The user's only permission: `sts:AssumeRole` into `role/control/powerlab-*` with MFA |
@@ -72,7 +74,7 @@ Check that `Account` is the account the stack should be deployed to.
 ### 4. Validate the policies
 
 ```bash
-for f in powerlab-deploy-policy.json powerlab-boundary-policy.json powerlab-user-policy.json; do
+for f in powerlab-deploy-policy.json powerlab-deploy-services-policy.json powerlab-boundary-policy.json powerlab-user-policy.json; do
   echo "== $f"
   aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
     --policy-document file://$f --query 'findings[].[findingType,issueCode,findingDetails]' --output text
@@ -92,6 +94,8 @@ aws iam create-policy --path /control/ --policy-name powerlab-boundary \
   --policy-document file://powerlab-boundary-policy.json
 aws iam create-policy --path /control/ --policy-name powerlab-deploy \
   --policy-document file://powerlab-deploy-policy.json
+aws iam create-policy --path /control/ --policy-name powerlab-deploy-services \
+  --policy-document file://powerlab-deploy-services-policy.json
 
 # Operator user
 aws iam create-user --user-name powerlab
@@ -107,6 +111,8 @@ aws iam create-role --path /control/ --role-name powerlab-deploy \
   --assume-role-policy-document "$TRUST"
 aws iam attach-role-policy --role-name powerlab-deploy \
   --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/control/powerlab-deploy"
+aws iam attach-role-policy --role-name powerlab-deploy \
+  --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/control/powerlab-deploy-services"
 
 aws iam create-role --path /control/ --role-name powerlab-review \
   --assume-role-policy-document "$TRUST"
@@ -121,7 +127,7 @@ aws iam list-roles --path-prefix /control/ --query 'Roles[].Arn' --output text
 aws iam list-policies --scope Local --path-prefix /control/ --query 'Policies[].Arn' --output text
 ```
 
-Expect two roles (`powerlab-deploy`, `powerlab-review`) and two policies (`powerlab-boundary`, `powerlab-deploy`).
+Expect two roles (`powerlab-deploy`, `powerlab-review`) and three policies (`powerlab-boundary`, `powerlab-deploy`, `powerlab-deploy-services`).
 
 ### 6. Add MFA and an access key (IAM console)
 
@@ -179,8 +185,31 @@ aws iam delete-policy --profile powerlab-deploy \
 - **API Gateway CloudWatch role.** REST API logging uses one CloudWatch role for the whole account and region. The deploy role can read this setting but deliberately can't change it, so it doesn't overwrite a role other workloads rely on. If it isn't set yet, an administrator sets it once.
 - **Terraform state bucket.** The deploy role can create and use a bucket named `powerlab-tfstate-<unique-suffix>`. The deploy steps cover this.
 
+## Updating an existing setup
+
+When a later version of this repo changes the policies, an administrator applies the change in CloudShell after `git pull`. Validate first (step 4), then:
+
+```bash
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# A policy that already exists: add a new version and make it the default.
+# IAM keeps at most 5 versions - delete the oldest non-default one first if needed
+# (aws iam list-policy-versions / delete-policy-version).
+aws iam create-policy-version --set-as-default \
+  --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/control/powerlab-deploy" \
+  --policy-document file://powerlab-deploy-policy.json
+
+# A policy that is new in this version: create it and attach it to the role.
+aws iam create-policy --path /control/ --policy-name powerlab-deploy-services \
+  --policy-document file://powerlab-deploy-services-policy.json
+aws iam attach-role-policy --role-name powerlab-deploy \
+  --policy-arn "arn:aws:iam::$ACCOUNT_ID:policy/control/powerlab-deploy-services"
+```
+
+**Why updates are an administrator task:** the deploy role is explicitly denied any change under `/control/`, so it can never widen its own permissions. Every permission increase is a deliberate, reviewed change made by someone else - separation of duties, a Well-Architected Security practice.
+
 ## Notes
 
 - Every role Terraform creates in this repo sets `permissions_boundary` to `powerlab-boundary`; without it, `iam:CreateRole` is denied.
 - The boundary will grow with later builds (for example `bedrock:ApplyGuardrail` for guardrails). Update `powerlab-boundary-policy.json` and run `aws iam create-policy-version --set-as-default` as an administrator.
-- **Using IAM Identity Center instead:** create permission sets from `powerlab-deploy-policy.json` and `ReadOnlyAccess`, and skip the user, trust policy and profiles above. The boundary policy is still required.
+- **Using IAM Identity Center instead:** create permission sets from `powerlab-deploy-policy.json` + `powerlab-deploy-services-policy.json` and `ReadOnlyAccess`, and skip the user, trust policy and profiles above. The boundary policy is still required.
