@@ -22,6 +22,7 @@ This repository is built to be learned from, not just deployed. Every design dec
 | [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order, architecture decisions (each tagged with its Well-Architected pillars), API contract and definition of done |
 | [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Well-Architected Security pillar in practice |
 | [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Well-Architected Cost Optimization pillar in practice, and why Bedrock model charges need special handling |
+| [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) | Every setup and verification command with its purpose, expected response and common errors - run before the first deploy |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
 
 ## Architecture
@@ -94,6 +95,7 @@ serverless_genai_reference_architecture/
 │   └── package.json              # Dependencies and build scripts
 ├── docs/                         # Documentation
 │   ├── LEARNING_GUIDE.md         # Concepts, request flow, Well-Architected reasoning, exam mapping
+│   ├── PREFLIGHT_CHECKS.md       # Setup verification runbook: command, purpose, expected result, errors
 │   ├── BUILD_PLAN.md             # Build order and decisions, each mapped to Well-Architected pillars
 │   ├── ARCHITECTURE.md           # Detailed architecture & design decisions
 │   ├── DEPLOYMENT.md             # Step-by-step deployment guide
@@ -118,7 +120,7 @@ serverless_genai_reference_architecture/
 - Terraform >= 1.10
 - Node.js 22+ (to build the Lambda function)
 - Python 3.11+ (example client and integration tests)
-- AWS CLI v2 configured with credentials
+- AWS CLI v2, a recent release (2025 or later). Older 2.x versions lack commands this project uses, such as `aws bedrock list-inference-profiles`. Check with `aws --version`
 
 ### Deploy
 
