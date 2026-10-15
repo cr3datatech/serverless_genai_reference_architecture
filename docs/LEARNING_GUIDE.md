@@ -117,6 +117,7 @@ The response includes the answer, token counts, an estimated cost, and a request
 - **Converse API** - a single, model-agnostic request/response format (`messages`, `system`, `inferenceConfig`) that works across Bedrock models. Switching models doesn't require changing request code. The response includes a `usage` block with token counts.
 - **ConverseStream** - the streaming variant. The model's answer arrives as a series of events (`contentBlockDelta`) while it is generated, followed by a `metadata` event containing usage.
 - **Inference profiles (cross-region inference)** - instead of calling a model in one region, you call a profile (for example one with an `eu.` prefix) that can route the request to any region in that geography with available capacity. This raises throughput and resilience, and geographic profiles keep data within that geography. Many newer models are only available through inference profiles.
+- **System-defined vs application inference profiles** - the geographic profiles above are *system-defined*: AWS owns them and they can't be tagged. An *application inference profile* is one you create, which wraps a system profile (same models, same routing) but has its own ARN and **your tags**. Invoking the application profile instead of the system one makes model spend show up under your cost-allocation tags. That matters because third-party model charges are billed through AWS Marketplace and otherwise can't be tied to the workload that caused them.
 - **Quotas** - Bedrock limits requests per minute and tokens per minute per model per account. Exceeding them returns a `ThrottlingException`.
 - **Model access** - some providers require a one-time agreement or use-case form before their models can be invoked in an account.
 
@@ -236,6 +237,10 @@ IAM decides who can do what. This project applies the Security pillar before any
 - **Declarative IaC** - you describe the desired end state; Terraform works out what to create, change or delete (`plan`), then does it (`apply`).
 - **State** - Terraform records what it manages in a state file. Stored remotely in S3 with locking, so it is shared, versioned and can't be corrupted by two runs at once.
 - **Default tags** - tags applied automatically to every resource the provider creates.
+- **Partial backend configuration** - the `backend "s3" {}` block is left empty in code, and the bucket name and region are supplied at `terraform init` from a gitignored `backend.hcl`. The same code works in any account, and no account details are committed.
+- **Dependency lock file** - `.terraform.lock.hcl` records the exact provider version and its checksums for each operating system. It's committed, so every deployment uses an identical, verified provider build rather than whatever is newest that day.
+- **Credentials for Terraform with MFA** - Terraform can't prompt for an MFA code. The AWS CLI does the MFA sign-in and exports the resulting temporary credentials into the terminal session (`aws configure export-credentials`); Terraform picks them up from the environment. Nothing long-lived is written to disk.
+- **Saved plans** - `terraform plan -out=tfplan` followed by `terraform apply tfplan` applies exactly what was reviewed, even if something changed in between (Terraform refuses a stale plan).
 
 **Choices in this project and why**
 
@@ -243,6 +248,9 @@ IAM decides who can do what. This project applies the Security pillar before any
 |---|---|---|
 | All infrastructure in Terraform; nothing created by hand | Operational Excellence, Reliability | Repeatable, reviewable, and reversible - `destroy` removes everything |
 | Remote, versioned, encrypted **state with locking** | Reliability, Security | State is recoverable and never edited concurrently |
+| **Committed lock file** | Security, Reliability | Provider builds are pinned and checksum-verified - a supply-chain control and a guarantee of repeatable deploys |
+| **MFA-backed temporary credentials** exported for each session | Security | No long-lived deploy keys on disk; every deploy session starts with MFA |
+| **Saved plan, then apply** | Operational Excellence, Reliability | What runs is exactly what was reviewed |
 | **Default tags** on everything | Cost Optimization, Operational Excellence | Cost allocation and review scoping |
 | Account-specific values only in gitignored files (`terraform.tfvars`, `backend.hcl`) | Security | The repository can be public without exposing the deploying account |
 

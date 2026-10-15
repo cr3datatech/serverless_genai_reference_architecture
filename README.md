@@ -82,13 +82,18 @@ serverless_genai_reference_architecture/
 │   ├── iam/                      # Least-privilege operator roles + permissions boundary
 │   └── budget/                   # AWS Budget with email alerts
 ├── terraform/                    # Infrastructure as Code
-│   ├── main.tf                   # Main resource definitions
-│   ├── variables.tf              # Input variables
-│   ├── outputs.tf                # Stack outputs (endpoint URL, etc.)
-│   ├── iam.tf                    # IAM roles & policies
-│   ├── api_gateway.tf            # API Gateway + auth
-│   ├── lambda.tf                 # Lambda function config
-│   └── terraform.tfvars.example  # Example variable values
+│   ├── versions.tf               # Terraform and provider version constraints
+│   ├── backend.tf                # S3 remote state (settings from gitignored backend.hcl)
+│   ├── providers.tf              # AWS provider, default tags
+│   ├── variables.tf / locals.tf  # Inputs and derived names
+│   ├── bedrock.tf                # Tagged application inference profile per model alias
+│   ├── iam.tf                    # Lambda execution role (with permissions boundary)
+│   ├── outputs.tf                # Role ARN, model alias ARNs
+│   ├── api_gateway.tf            # REST API, Cognito authorizer, usage plan (phase 2)
+│   ├── lambda.tf                 # Lambda function (phase 2)
+│   ├── .terraform.lock.hcl       # Pinned provider versions and checksums
+│   ├── backend.hcl.example       # Template for backend.hcl
+│   └── terraform.tfvars.example  # Template for terraform.tfvars
 ├── lambda/                       # Lambda function source (Node.js 22, TypeScript)
 │   ├── src/handler.ts            # Request validation, model alias resolution, Converse/ConverseStream
 │   ├── src/cost.ts               # Token usage → estimated cost, EMF metrics
@@ -124,37 +129,21 @@ serverless_genai_reference_architecture/
 
 ### Deploy
 
-1. **Clone & configure:**
-   ```bash
-   git clone <this-repo-url>
-   cd <repo-folder>/terraform
+| Step | Guide |
+|------|-------|
+| 1. One-time account setup (administrator) | [bootstrap/](bootstrap/README.md): least-privilege IAM, Cognito user pool, AWS Budget |
+| 2. Verify the account | [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) |
+| 3. Deploy, verify, remove | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 
-   cp terraform.tfvars.example terraform.tfvars
-   # Edit terraform.tfvars with your values (region, project name, etc.)
-   ```
+In short, once the account is set up:
 
-2. **Deploy to AWS:**
-   ```bash
-   terraform init
-   terraform plan
-   terraform apply
-   ```
+```bash
+terraform -chdir=terraform init -backend-config=backend.hcl
+terraform -chdir=terraform plan -out=tfplan
+terraform -chdir=terraform apply tfplan
+```
 
-3. **Test the API:**
-   ```bash
-   # Get your API endpoint from Terraform outputs
-   API_KEY=$(terraform output -raw api_key)
-   ENDPOINT=$(terraform output -raw api_gateway_endpoint)
-
-   curl -X POST "$ENDPOINT/chat" \
-     -H "Authorization: Bearer $API_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "model": "claude-3-sonnet-20240229",
-       "messages": [{"role": "user", "content": "Hello, Claude!"}],
-       "stream": false
-     }'
-   ```
+The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). The API endpoint and test examples arrive with phase 2.
 
 ## Key Features
 
