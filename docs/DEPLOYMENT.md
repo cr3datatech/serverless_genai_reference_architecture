@@ -130,6 +130,8 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | `AccessDenied ... iam:CreateRole` | The role would be created without the permissions boundary, or the boundary name differs from `permissions_boundary_name` | The boundary must be `policy/control/powerlab-boundary` (bootstrap/iam). This error means the guardrail is working |
 | `AccessDenied ... bedrock:CreateInferenceProfile` | `powerlab-deploy-services` policy not attached | [Preflight check 2.5](PREFLIGHT_CHECKS.md#25-deploy-role-has-both-policies-attached) |
 | `Saved plan is stale` | Something changed after planning | Run step 5 again |
+| `ValidationException: Value at 'description' failed to satisfy constraint: ... ([0-9a-zA-Z:.][ _-]?)+` | Bedrock inference profile descriptions allow only letters, digits, `:` and `.`, separated by single spaces, `_` or `-` (no quotes, arrows or other punctuation) | Fixed in `bedrock.tf`; if you customise descriptions, keep to that pattern |
+| Some resources created, others failed | Terraform applies what it can and records it in state | Fix the cause, then plan and apply again: Terraform creates only what's missing. A failed apply never needs manual cleanup first |
 
 ---
 
@@ -158,7 +160,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | **Command** | `aws bedrock-runtime converse --region <region> --model-id <fast-profile-arn> --messages '[{"role":"user","content":[{"text":"Reply with the single word: hello"}]}]' --query 'output.message.content[0].text' --output text` |
 | **Purpose** | Proves the tagged profile works end to end. `<fast-profile-arn>` is the `fast` entry of `terraform -chdir=terraform output model_aliases` |
 | **Expected** | `hello` |
-| **Common errors** | As [preflight check 6.2](PREFLIGHT_CHECKS.md#62-one-real-model-call). In PowerShell versions before 7.3, run it in Git Bash if the JSON is rejected |
+| **Common errors** | As [preflight check 6.2](PREFLIGHT_CHECKS.md#62-one-real-model-call). `AccessDeniedException ... bedrock:InvokeModel on resource ...application-inference-profile/...` means the account's `powerlab-deploy` policy predates application-profile support: apply the current `powerlab-deploy-policy.json` as a new policy version ([bootstrap/iam: Updating an existing setup](../bootstrap/iam/README.md#updating-an-existing-setup)). In PowerShell versions before 7.3, run it in Git Bash if the JSON is rejected |
 
 ---
 

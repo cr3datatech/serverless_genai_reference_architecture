@@ -14,9 +14,11 @@ data "aws_bedrock_inference_profile" "source" {
 }
 
 resource "aws_bedrock_inference_profile" "alias" {
-  for_each    = var.models
-  name        = "${local.name}-${each.key}"
-  description = "${local.name} '${each.key}' alias -> ${each.value.source_inference_profile_id}"
+  for_each = var.models
+  name     = "${local.name}-${each.key}"
+  # Bedrock restricts descriptions to letters, digits, ':' and '.', with single
+  # spaces, '_' or '-' between them - no quotes, arrows or other punctuation.
+  description = "${local.name} ${each.key} alias for ${each.value.source_inference_profile_id}"
 
   model_source {
     copy_from = data.aws_bedrock_inference_profile.source[each.key].inference_profile_arn
