@@ -18,6 +18,7 @@ export interface Config {
   maxTokensCap: number;
   maxBodyBytes: number;
   bedrockTimeoutMs: number;
+  metricsNamespace: string;
 }
 
 function intFromEnv(name: string, fallback: number): number {
@@ -41,5 +42,6 @@ export function loadConfig(): Config {
     maxTokensCap: intFromEnv("MAX_TOKENS_CAP", 1024),
     maxBodyBytes: intFromEnv("MAX_BODY_BYTES", 65536),
     bedrockTimeoutMs: intFromEnv("BEDROCK_TIMEOUT_MS", 25000),
+    metricsNamespace: process.env.METRICS_NAMESPACE ?? "PowerLab/GenAIApi",
   };
 }

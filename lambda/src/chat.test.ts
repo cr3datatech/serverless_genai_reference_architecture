@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { estimateCost, parseChatRequest } from "./chat";
 import type { Config } from "./config";
 import { ApiError, toApiError } from "./http";
+import { modelCallMetrics } from "./metrics";
 
 const config: Config = {
   models: {
@@ -13,6 +14,7 @@ const config: Config = {
   maxTokensCap: 1024,
   maxBodyBytes: 1000,
   bedrockTimeoutMs: 25000,
+  metricsNamespace: "Test",
 };
 
 const parse = (body: unknown) => parseChatRequest(JSON.stringify(body), false, config);
@@ -71,4 +73,14 @@ test("Bedrock errors map to client-safe errors", () => {
   assert.equal(toApiError(named("AccessDeniedException")).status, 503);
   assert.equal(toApiError(named("TimeoutError")).status, 504);
   assert.equal(toApiError(named("Something")).message, "Internal error.");
+});
+
+test("EMF block declares exactly the metrics present", () => {
+  const line = modelCallMetrics("Test", "fast", { InputTokens: 10, OutputTokens: 2, ModelLatency: 300 });
+  const declared = (line._aws as any).CloudWatchMetrics[0];
+  assert.deepEqual(declared.Dimensions, [["Model"]]);
+  assert.deepEqual(declared.Metrics.map((m: { Name: string }) => m.Name), ["InputTokens", "OutputTokens", "ModelLatency"]);
+  assert.equal(line.Model, "fast");
+  assert.equal(line.InputTokens, 10);
+  assert.equal("CostUSD" in line, false);
 });

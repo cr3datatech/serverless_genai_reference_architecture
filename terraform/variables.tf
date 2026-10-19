@@ -96,3 +96,43 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "metrics_namespace" {
+  description = "CloudWatch namespace for the function's model metrics (tokens, cost, latency per alias)."
+  type        = string
+  default     = "PowerLab/GenAIApi"
+}
+
+variable "alarm_email" {
+  description = "Email address subscribed to the alarm topic. Null creates the topic without a subscription. AWS sends a confirmation link that must be clicked."
+  type        = string
+  default     = null
+}
+
+variable "alarms" {
+  description = "Alarm thresholds."
+  type = object({
+    server_errors_5min = number # 5xx responses in 5 minutes
+    p95_latency_ms     = number # sustained for 15 minutes
+    daily_cost_usd     = number # estimated model cost per day
+  })
+  default = { server_errors_5min = 3, p95_latency_ms = 20000, daily_cost_usd = 1 }
+}
+
+variable "enable_access_logs" {
+  description = "Write an API Gateway access log. Requires the account-wide API Gateway CloudWatch role (docs/PREFLIGHT_CHECKS.md 5.1)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_dashboard" {
+  description = "Create a CloudWatch dashboard (about 3 USD per month)."
+  type        = bool
+  default     = false
+}
+
+variable "enable_api_tracing" {
+  description = "X-Ray tracing on the API stage. Needs iam:CreateServiceLinkedRole for ops.apigateway.amazonaws.com, which the deploy role doesn't have; the function is traced regardless."
+  type        = bool
+  default     = false
+}

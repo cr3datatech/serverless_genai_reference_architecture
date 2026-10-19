@@ -39,3 +39,8 @@ output "api_keys" {
   value       = { for k, key in aws_api_gateway_api_key.client : k => key.value }
   sensitive   = true
 }
+
+output "alarm_topic_arn" {
+  description = "SNS topic the alarms notify. Subscribe more endpoints to it as needed."
+  value       = aws_sns_topic.alarms.arn
+}

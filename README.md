@@ -146,7 +146,7 @@ terraform -chdir=terraform plan -out=tfplan
 terraform -chdir=terraform apply tfplan
 ```
 
-The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). Phases 1 and 2 are deployable: the authenticated, rate-limited `/v1/chat` and `/v1/models` endpoints. [DEPLOYMENT.md steps 11-14](docs/DEPLOYMENT.md#11-get-an-access-token) get a token and call the API.
+The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). Phases 1, 2 and 4 are deployable: the authenticated, rate-limited `/v1/chat` and `/v1/models` endpoints, with per-model token and cost metrics, tracing and alarms. [DEPLOYMENT.md steps 11-15](docs/DEPLOYMENT.md#11-get-an-access-token) get a token, call the API and check the monitoring.
 
 ## Key Features
 

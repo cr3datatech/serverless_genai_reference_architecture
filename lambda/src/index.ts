@@ -3,6 +3,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-l
 import { estimateCost, parseChatRequest } from "./chat";
 import { loadConfig } from "./config";
 import { ApiError, errorResponse, json, toApiError } from "./http";
+import { modelCallMetrics } from "./metrics";
 
 // Created once per execution environment and reused across invocations
 // (Performance Efficiency: no per-request client setup).
@@ -85,6 +86,12 @@ async function chat(
     cost_estimate_usd: cost,
     model_latency_ms: result.metrics?.latencyMs,
     stop_reason: result.stopReason,
+    ...modelCallMetrics(config.metricsNamespace, req.alias, {
+      InputTokens: inputTokens,
+      OutputTokens: outputTokens,
+      CostUSD: cost ?? undefined,
+      ModelLatency: result.metrics?.latencyMs,
+    }),
   });
 
   const output = (result.output?.message?.content ?? []).map((c) => c.text ?? "").join("");

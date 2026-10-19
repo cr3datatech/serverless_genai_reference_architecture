@@ -234,8 +234,9 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 | **Command** | `aws apigateway get-account --profile powerlab-deploy --region <region> --query cloudwatchRoleArn --output text` |
 | **Purpose** | REST API logging needs one CloudWatch role per account **and region**. The deploy role can read this setting but deliberately can't change it, because it's shared by every API in the region |
 | **Expected** | An IAM role ARN: the setting already exists and nothing more is needed |
+| **When it matters** | Only for the optional API access log (`enable_access_logs = true` in `terraform.tfvars`). With `None`, the stack deploys and runs normally; the function's own log still records every request that reaches it |
 
-**If it prints `None`**, an administrator sets it once in CloudShell:
+**If it prints `None` and the access log is wanted**, an administrator sets it once in CloudShell:
 
 | Step | Command |
 |---|---|
@@ -249,6 +250,16 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 |---|---|---|
 | `BadRequestException: The role ARN does not have required permissions` on `update-account` | IAM changes take a few seconds to propagate | Wait 15 seconds and retry |
 | An unfamiliar role ARN is returned | Another workload in the account already set it | Leave it; it works for all APIs in the region. Don't replace it |
+
+### 5.2 X-Ray tracing on the API stage (optional)
+
+X-Ray on the **function** works with the default setup. X-Ray on the **API stage** (`enable_api_tracing = true`) is off by default because enabling it fails for the deploy role:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Apply: `UpdateStage ... AccessDeniedException: Caller does not have permissions to create a Service Linked Role` | API Gateway uses a service-linked role (`AWSServiceRoleForAPIGateway`) for tracing, and checks that the **caller** may create it. Creating the role in advance as an administrator (`aws iam create-service-linked-role --aws-service-name ops.apigateway.amazonaws.com`) was not enough in testing; the check still failed | Keep `enable_api_tracing = false`, or extend the deploy policy with `iam:CreateServiceLinkedRole` restricted by the condition `"StringEquals": {"iam:AWSServiceName": "ops.apigateway.amazonaws.com"}` (it then still can't create any other role), apply it as a new policy version ([bootstrap/iam](../bootstrap/iam/README.md#updating-an-existing-setup)) and set the variable to `true` |
+
+Without stage tracing, each trace starts at the function: it shows the function's run time and its call to Bedrock, but not the time API Gateway spends on authentication and throttling. The API Gateway `Latency` and `IntegrationLatency` metrics cover that gap.
 
 ---
 

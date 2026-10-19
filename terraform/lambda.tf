@@ -33,6 +33,11 @@ resource "aws_lambda_function" "chat" {
   # Just above the in-code Bedrock timeout and the 29 s API Gateway limit.
   timeout = 30
 
+  # X-Ray: each invocation appears in the trace that API Gateway starts.
+  tracing_config {
+    mode = "Active"
+  }
+
   # No reserved concurrency: it would need spare account concurrency, and
   # throttling at API Gateway (stage and usage plan) already caps load (D9).
 
@@ -46,8 +51,9 @@ resource "aws_lambda_function" "chat" {
           outputPerMtok = try(var.models[alias].price_per_mtok.output, null)
         }
       })
-      DEFAULT_MODEL  = var.default_model
-      MAX_TOKENS_CAP = tostring(var.max_tokens_cap)
+      DEFAULT_MODEL     = var.default_model
+      MAX_TOKENS_CAP    = tostring(var.max_tokens_cap)
+      METRICS_NAMESPACE = var.metrics_namespace
     }
   }
 

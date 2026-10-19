@@ -16,7 +16,8 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 |---|---|---|
 | 1 - Foundation | Lambda execution role (with permissions boundary); one tagged Bedrock application inference profile per model alias | Deployed |
 | 2 - Non-streaming path | Lambda function and log group; REST API (`POST /v1/chat`, `GET /v1/models`) with Cognito authorizer, API keys, usage plan and stage throttling; Cognito domain, resource server and one app client per API client | Deployed |
-| 3 onward | See [BUILD_PLAN.md](BUILD_PLAN.md) | Planned |
+| 4 - Observability and cost | Embedded Metric Format metrics per alias (tokens, cost, model latency); X-Ray on the function; four CloudWatch alarms (5xx, p95 latency, Lambda throttles, daily estimated cost) to an SNS topic with optional email. Optional: API access log, API stage tracing, dashboard | Deployed |
+| 3, 5 onward | See [BUILD_PLAN.md](BUILD_PLAN.md) | Planned |
 
 ---
 
@@ -124,7 +125,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 |---|---|
 | **Command** | `terraform -chdir=terraform plan -out=tfplan` |
 | **Purpose** | Shows exactly what will be created, changed or destroyed, without changing anything. Saving the plan guarantees that what is applied is what was reviewed |
-| **Expected (first deploy)** | `Plan: 29 to add, 0 to change, 0 to destroy.` with the default single API client (5 resources for phase 1, 24 for phase 2) |
+| **Expected (first deploy)** | `Plan: 34 to add, 0 to change, 0 to destroy.` with the default single API client and no `alarm_email` (5 resources for phase 1, 24 for phase 2, 5 for phase 4); 35 with `alarm_email` set |
 
 **Common errors**
 
@@ -140,7 +141,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 |---|---|
 | **Command** | `terraform -chdir=terraform apply tfplan` |
 | **Purpose** | Creates exactly what the saved plan showed |
-| **Expected** | `Apply complete!` followed by the outputs `api_url`, `token_url`, `oauth_scope`, `client_ids`, `model_aliases` and `lambda_role_arn`, with `client_secrets` and `api_keys` shown as `<sensitive>` |
+| **Expected** | `Apply complete!` followed by the outputs `alarm_topic_arn`, `api_url`, `token_url`, `oauth_scope`, `client_ids`, `model_aliases` and `lambda_role_arn`, with `client_secrets` and `api_keys` shown as `<sensitive>`. With `alarm_email` set, AWS emails a subscription confirmation link: click it, or no alarm emails arrive |
 
 **Common errors**
 
@@ -151,6 +152,8 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | `AccessDenied ... cognito-idp:...` | `cognito_user_pool_id` differs from the pool named in the `powerlab-deploy-services` policy | Use the pool created in bootstrap; the deploy role may manage only that one ([preflight check 2.6](PREFLIGHT_CHECKS.md#26-services-policy-names-the-right-user-pool)) |
 | `Domain already exists` on the Cognito domain | Another account uses the same prefix in this region | Change the prefix in `cognito.tf`; it must be unique per region |
 | `ValidationException: Value at 'description' failed to satisfy constraint: ... ([0-9a-zA-Z:.][ _-]?)+` | Bedrock inference profile descriptions allow only letters, digits, `:` and `.`, separated by single spaces, `_` or `-` (no quotes, arrows or other punctuation) | Fixed in `bedrock.tf`; if you customise descriptions, keep to that pattern |
+| `UpdateStage ... Caller does not have permissions to create a Service Linked Role` | `enable_api_tracing = true` without the extra permission | [Preflight check 5.2](PREFLIGHT_CHECKS.md#52-x-ray-tracing-on-the-api-stage-optional) |
+| `CloudWatch Logs role ARN must be set in account settings` | `enable_access_logs = true` but the account has no API Gateway CloudWatch role | [Preflight check 5.1](PREFLIGHT_CHECKS.md#51-account-level-cloudwatch-role), or set it back to `false` |
 | `Saved plan is stale` | Something changed after planning | Run step 6 again |
 | Some resources created, others failed | Terraform applies what it can and records it in state | Fix the cause, then plan and apply again: Terraform creates only what's missing. A failed apply never needs manual cleanup first |
 
@@ -234,6 +237,22 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 | **Expected** | Lines with `request_id`, `route`, `client_id`, `model`, `input_tokens`, `output_tokens`, `cost_estimate_usd`, `model_latency_ms`, `status` and `latency_ms`, and **no** prompt or response text (D8) |
 | **Common errors** | `... on resource: ...log-group:C:/Program Files/Git/aws/lambda/...`: Git Bash converted the log group name into a Windows path. Keep `MSYS_NO_PATHCONV=1` |
 
+### 15. Metrics, traces and alarms
+
+Make a few calls first (step 12), then wait 1-2 minutes: CloudWatch extracts metrics from the log lines asynchronously.
+
+| Check | Command | Expected |
+|---|---|---|
+| Model metrics exist | `aws cloudwatch list-metrics --region <region> --namespace PowerLab/GenAIApi --query 'Metrics[].[MetricName,Dimensions[0].Value]' --output text` | `CostUSD`, `InputTokens`, `OutputTokens` and `ModelLatency` for each alias that has been called |
+| Cost adds up | `aws cloudwatch get-metric-statistics --region <region> --namespace PowerLab/GenAIApi --metric-name CostUSD --dimensions Name=Model,Value=fast --start-time <ISO time an hour ago> --end-time <ISO time now> --period 3600 --statistics Sum SampleCount --output text` | The sum of the `cost_estimate_usd` values the API returned, and the number of calls |
+| Alarms are armed | `aws cloudwatch describe-alarms --region <region> --alarm-name-prefix powerlab-genai-api --query 'MetricAlarms[].[AlarmName,StateValue]' --output text` | Four alarms, each `OK` (or `INSUFFICIENT_DATA` for a few minutes after creation) |
+| Email is confirmed | `aws sns list-subscriptions-by-topic --region <region> --topic-arn <alarm_topic_arn> --query 'Subscriptions[].SubscriptionArn' --output text` | An ARN. `PendingConfirmation` means the link in the confirmation email hasn't been clicked |
+| Traces arrive | `aws xray get-trace-summaries --region <region> --start-time <epoch seconds 15 minutes ago> --end-time <epoch seconds now> --query 'TraceSummaries[].Duration' --output text` | One duration per recent request, in seconds |
+
+In the console: **CloudWatch -> All metrics -> PowerLab/GenAIApi** for the model metrics, **CloudWatch -> Alarms** for the alarms, and **CloudWatch -> X-Ray traces** for the traces.
+
+**Why these four alarms:** each is something an operator would act on. *5xx* means clients are getting failures (**Reliability**). *p95 latency* catches slowness that an average hides (**Performance Efficiency**). *Lambda throttles* matters because Lambda concurrency is shared by every function in the account and region (**Reliability**). *Daily cost* reacts within minutes, unlike the account budget, which reports actual charges hours later (**Cost Optimization**). Everything else is visible in metrics without paying for an alarm.
+
 ---
 
 ## Change
@@ -261,7 +280,7 @@ Edit `lambda/src`, then steps 5, 6, 7 and 12. The plan shows only the function `
 
 ## Remove
 
-### 15. Destroy the stack
+### 16. Destroy the stack
 
 | | |
 |---|---|

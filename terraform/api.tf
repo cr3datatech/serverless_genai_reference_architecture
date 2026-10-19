@@ -109,6 +109,34 @@ resource "aws_api_gateway_stage" "api" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   deployment_id = aws_api_gateway_deployment.api.id
   stage_name    = var.stage_name
+
+  # X-Ray on the stage is optional: enabling it needs permission to create
+  # API Gateway's service-linked role, which the deploy role doesn't have
+  # (docs/DEPLOYMENT.md, Monitoring). The function is traced either way.
+  xray_tracing_enabled = var.enable_api_tracing
+
+  dynamic "access_log_settings" {
+    for_each = var.enable_access_logs ? [1] : []
+    content {
+      destination_arn = aws_cloudwatch_log_group.api_access[0].arn
+      # Who called, what happened and how long it took; no request or
+      # response bodies.
+      format = jsonencode({
+        request_id          = "$context.requestId"
+        time                = "$context.requestTime"
+        ip                  = "$context.identity.sourceIp"
+        client_id           = "$context.authorizer.claims.client_id"
+        api_key_id          = "$context.identity.apiKeyId"
+        method              = "$context.httpMethod"
+        path                = "$context.resourcePath"
+        status              = "$context.status"
+        error_type          = "$context.error.responseType"
+        latency_ms          = "$context.responseLatency"
+        integration_latency = "$context.integration.latency"
+        response_bytes      = "$context.responseLength"
+      })
+    }
+  }
 }
 
 # Stage-wide ceiling for all clients together.
