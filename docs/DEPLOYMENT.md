@@ -105,10 +105,10 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | | |
 |---|---|
 | **Commands** | `npm --prefix lambda ci` then `npm --prefix lambda test` then `npm --prefix lambda run build` |
-| **Purpose** | Installs the exact dependency versions from `lambda/package-lock.json`, type-checks and runs the unit tests (request validation, cost estimate, error mapping; no AWS calls), then bundles `lambda/src` into `lambda/dist/index.js`. Terraform zips `lambda/dist` and redeploys the function whenever the bundle changes |
-| **Expected** | `pass 6`, `fail 0`, then a bundle of a few KB: `dist\index.js 6.1kb` |
+| **Purpose** | Installs the exact dependency versions from `lambda/package-lock.json`, type-checks and runs the unit tests (request validation, cost estimate, error mapping; no AWS calls), then compiles `lambda/src/*.ts` to `lambda/dist/*.js`. Terraform zips `lambda/dist` and redeploys the function whenever it changes |
+| **Expected** | `pass 6`, `fail 0`, then no output from the build; `lambda/dist` holds `index.js`, `chat.js`, `config.js` and `http.js` (about 12 KB in total) |
 
-The AWS SDK is not bundled: the Lambda Node.js runtime provides it, which keeps the package tiny and cold starts fast (**Performance Efficiency**). The trade-off is that AWS controls the SDK version at runtime; the version used for type-checking and tests is pinned in `package.json`.
+**Why plain compiled JavaScript, not a bundle:** the function's only runtime dependency is the AWS SDK, which the Lambda Node.js runtime already provides. So the TypeScript compiler's output is deployed as is: one `.js` file per source file, with the comments kept. It reads almost line for line like `lambda/src`, so the code can be followed in the Lambda console (**Operational Excellence**: code that operators can read), and the package stays tiny, which keeps cold starts fast (**Performance Efficiency**). The trade-off is that AWS controls the SDK version at runtime; the version used for type-checking and tests is pinned in `package.json`. If a later build adds other dependencies, bundling (for example with esbuild, already used for the tests) becomes necessary.
 
 **Common errors**
 
@@ -116,7 +116,7 @@ The AWS SDK is not bundled: the Lambda Node.js runtime provides it, which keeps 
 |---|---|---|
 | `npm: command not found` | Node.js not installed | Install Node.js 22 or later ([preflight check 1.3](PREFLIGHT_CHECKS.md#13-nodejs-version)) |
 | Plan: `error archiving directory: could not archive missing directory` | This step was skipped, so `lambda/dist` doesn't exist | Run the build, then plan again |
-| Apply: `CreateFunction, decomposing request: bufio.Scanner: token too long` | The upload is too large for the provider's request handling. Happens if the AWS SDK is bundled into the package | Keep `--external:@aws-sdk/*` in the `build` script |
+| Apply: `CreateFunction, decomposing request: bufio.Scanner: token too long` | The inline upload is too large for the provider's request handling (seen with a 578 KB package that bundled the AWS SDK) | Don't bundle the AWS SDK into the package; the runtime provides it |
 
 ### 6. Plan
 

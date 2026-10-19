@@ -1,8 +1,9 @@
 # The chat function: validates requests, resolves aliases, calls Bedrock.
 #
-# Build the bundle before planning: `npm ci` and `npm run build` in lambda/
-# (docs/DEPLOYMENT.md). Terraform zips lambda/dist and redeploys whenever
-# the bundle's hash changes.
+# Build before planning: `npm ci` and `npm run build` in lambda/
+# (docs/DEPLOYMENT.md). The build compiles lambda/src to plain JavaScript in
+# lambda/dist, one file per source file, so the code stays readable in the
+# Lambda console. Terraform zips lambda/dist and redeploys whenever it changes.
 
 data "archive_file" "lambda" {
   type        = "zip"
@@ -47,7 +48,6 @@ resource "aws_lambda_function" "chat" {
       })
       DEFAULT_MODEL  = var.default_model
       MAX_TOKENS_CAP = tostring(var.max_tokens_cap)
-      NODE_OPTIONS   = "--enable-source-maps"
     }
   }
 

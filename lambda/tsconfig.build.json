@@ -1,0 +1,12 @@
+{
+  // Emits the deployable JavaScript into dist/: one readable .js file per
+  // source file, comments kept, tests left out.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "removeComments": false
+  },
+  "exclude": ["src/**/*.test.ts"]
+}

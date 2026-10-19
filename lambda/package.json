@@ -4,8 +4,9 @@
   "description": "Lambda handler for the GenAI API: validates requests, resolves model aliases and calls the Bedrock Converse API.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --external:@aws-sdk/* --minify --sourcemap --outfile=dist/index.js",
-    "test": "tsc --noEmit && esbuild src/*.test.ts --bundle --platform=node --target=node22 --format=cjs --outdir=dist-test && node --test \"dist-test/*.test.js\""
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc --noEmit && tsc -p tsconfig.build.json",
+    "test": "tsc --noEmit && esbuild src/*.test.ts --bundle --platform=node --target=node22 --format=cjs --external:@aws-sdk/* --outdir=dist-test && node --test \"dist-test/*.test.js\""
   },
   "devDependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.1152.0",
