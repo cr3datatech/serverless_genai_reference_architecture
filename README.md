@@ -1,133 +1,97 @@
 # Serverless GenAI Reference Architecture
 
-A production-ready template for building Generative AI APIs on AWS using managed serverless services.
+A Well-Architected, serverless gateway for using AI models like Claude on AWS, with authenticated access, rate limits, approved models and per-request cost tracking. Built in Terraform, with every design decision mapped to the six AWS Well-Architected pillars.
 
 ## Overview
 
-This repository provides a reusable, enterprise-grade reference architecture for deploying foundation models via REST APIs without managing servers. It combines AWS Bedrock, Lambda, API Gateway, and observability to deliver a scalable, secure, cost-conscious pattern for GenAI applications.
+Applications send a chat request to one REST endpoint; the gateway checks who is calling, applies that caller's limits, sends the request to an approved foundation model on Amazon Bedrock, and returns the answer with its token usage and estimated cost. Everything is serverless (API Gateway, Lambda, Bedrock, Cognito, CloudWatch), so there are no servers to manage and almost nothing to pay while it's idle.
 
-**Perfect for:**
-- Teams building internal GenAI APIs
-- Proof-of-concepts that need to scale quickly
-- Organizations evaluating Bedrock costs and performance
-- Learning AWS GenAI best practices (AWS Certified Generative AI Developer – Professional)
+It is built to be **learned from**, not just deployed. Every choice is explained and justified against the **AWS Well-Architected Framework** - Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization and Sustainability - and the finished stack is reviewed against all six pillars.
 
 ## Start Here
 
-This repository is built to be learned from, not just deployed. Every design decision is explained and justified against the six pillars of the **AWS Well-Architected Framework** - Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization and Sustainability - and the finished stack is audited against them.
-
 | Read | To learn |
 |------|----------|
-| [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made, which Well-Architected pillar it serves, and how it maps to the AIP-C01 exam. Includes self-check questions |
-| [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order, architecture decisions (each tagged with its Well-Architected pillars), API contract and definition of done |
-| [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Well-Architected Security pillar in practice |
-| [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Well-Architected Cost Optimization pillar in practice, and why Bedrock model charges need special handling |
-| [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) | Every setup and verification command with its purpose, expected response and common errors - run before the first deploy |
-| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, deploy, verify end to end (token, API calls, the refusals) and remove the stack |
+| [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made and which Well-Architected pillar it serves. Includes self-check questions |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The deployed design: diagram, request walkthrough, security layers, reliability, observability, and known limitations |
+| [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order and the architecture decisions, each tagged with its Well-Architected pillars and the options considered |
+| [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Security pillar in practice |
+| [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Cost Optimization pillar in practice |
+| [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) | Every setup check with its command, purpose, expected response and common errors - run before the first deploy |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, deploy, verify end to end (token, API calls, refusals, metrics, integration tests) and remove the stack |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | The API contract: authentication, request and response fields, every error, and the limits |
+| [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | Prices, measured per-request costs, scenarios, and the controls that cap spend |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
+| [examples/](examples/README.md) | A Python client and curl examples |
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Client Application                      │
-└────────────────────────┬────────────────────────────────────┘
-                         │ HTTP/HTTPS + API Key
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        API Gateway                          │
-│               (Authentication, Rate Limiting)               │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Lambda Functions                        │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ - Converse API wrapper (streaming + non-streaming)   │   │
-│  │ - Request validation & model selection logic         │   │
-│  │ - Token counting & cost estimation                   │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        AWS Bedrock                          │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ - Claude 3 (Opus, Sonnet, Haiku)                     │   │
-│  │ - Other foundation models (optional)                 │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-     ┌───────────────────┼───────────────────┐
-     ▼                   ▼                   ▼
-┌───────────────┐  ┌────────────────┐  ┌───────────────┐
-│  CloudWatch   │  │   CloudWatch   │  │     X-Ray     │
-│     Logs      │  │    Metrics     │  │    Traces     │
-│   (Debug)     │  │ (Cost, latency)│  │ (Performance) │
-└───────────────┘  └────────────────┘  └───────────────┘
+```mermaid
+flowchart LR
+    C[Client] -- "client ID + secret" --> CG[Cognito]
+    CG -- "access token" --> C
+    C -- "token + API key" --> AG[API Gateway<br/>auth, API keys,<br/>throttling, quota]
+    AG --> L[Lambda<br/>validation, model alias,<br/>cost estimate]
+    L -- Converse --> B[Bedrock<br/>tagged inference profiles<br/>EU geographic routing]
+    L -.-> CW[CloudWatch<br/>logs, metrics, alarms]
+    L -.-> XR[X-Ray]
+    CW -.-> SNS[SNS email]
 ```
 
-**Key Components:**
-- **API Gateway** - RESTful HTTP endpoint with authentication (Cognito/API keys)
-- **Lambda** - Stateless compute layer that calls Bedrock Converse API
-- **Bedrock Converse API** - Foundation model invocation (streaming + non-streaming)
-- **IAM** - Fine-grained permissions for Lambda → Bedrock
-- **CloudWatch** - Logs, metrics, cost analysis
-- **X-Ray** - End-to-end request tracing for performance debugging
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) walks through a request step by step.
+
+## Features
+
+| Feature | How | Well-Architected |
+|---|---|---|
+| **Authenticated access** | OAuth 2.0 client-credentials tokens from Cognito (60 minutes), validated by API Gateway, plus an API key per client | Security |
+| **Approved models only** | Clients choose an alias (`fast`, `balanced`, `best`); only configured aliases are accepted, and IAM allows invoking only their models | Security, Cost Optimization |
+| **Models change by configuration** | An alias maps to a Bedrock inference profile in `terraform.tfvars`; switching models is a reviewed `terraform apply`, with no client or code change | Operational Excellence |
+| **Rate limits and quotas** | Per-client throttle and daily quota (usage plan), whole-API throttle, `max_tokens` cap, request size limit | Reliability, Cost Optimization |
+| **Per-request cost** | Every response returns token usage and `cost_estimate_usd`; model spend is also attributed to the stack through tagged application inference profiles | Cost Optimization |
+| **Observability** | One metadata-only JSON log line per request with embedded metrics (tokens, cost, latency per alias), X-Ray traces, four alarms to email | Operational Excellence, Reliability |
+| **Privacy by default** | Prompts and answers are never logged; errors never expose internal details | Security |
+| **EU data residency** | Geographic (`eu.`) cross-region inference profiles keep model inference in EU regions | Security |
+| **Least privilege throughout** | The function's role is capped by a permissions boundary; deploy and review roles need MFA and can't change their own guardrails | Security |
+| **Efficient by default** | Arm64 (Graviton) Lambda, no idle compute, short log retention | Cost Optimization, Sustainability |
+| **Tested** | Unit tests for the function's logic; integration tests against the deployed API, including every refusal | Operational Excellence |
+
+Not yet included: streaming responses (planned), and the controls left to later builds (WAF, customer managed KMS keys, VPC endpoints, Bedrock Guardrails). See [Known limitations](docs/ARCHITECTURE.md#known-limitations-and-trade-offs).
 
 ## What's Included
 
 ```
 serverless_genai_reference_architecture/
-├── bootstrap/                    # One-time account setup (admin runs once)
-│   ├── iam/                      # Least-privilege operator roles + permissions boundary
-│   └── budget/                   # AWS Budget with email alerts
-├── terraform/                    # Infrastructure as Code
-│   ├── versions.tf               # Terraform and provider version constraints
-│   ├── backend.tf                # S3 remote state (settings from gitignored backend.hcl)
-│   ├── providers.tf              # AWS provider, default tags
-│   ├── variables.tf / locals.tf  # Inputs and derived names
-│   ├── bedrock.tf                # Tagged application inference profile per model alias
-│   ├── iam.tf                    # Lambda execution role (with permissions boundary)
-│   ├── outputs.tf                # Role ARN, model alias ARNs
-│   ├── api_gateway.tf            # REST API, Cognito authorizer, usage plan (phase 2)
-│   ├── lambda.tf                 # Lambda function (phase 2)
-│   ├── .terraform.lock.hcl       # Pinned provider versions and checksums
-│   ├── backend.hcl.example       # Template for backend.hcl
-│   └── terraform.tfvars.example  # Template for terraform.tfvars
-├── lambda/                       # Lambda function source (Node.js 22, TypeScript)
-│   ├── src/handler.ts            # Request validation, model alias resolution, Converse/ConverseStream
-│   ├── src/cost.ts               # Token usage → estimated cost, EMF metrics
-│   └── package.json              # Dependencies and build scripts
-├── docs/                         # Documentation
-│   ├── LEARNING_GUIDE.md         # Concepts, request flow, Well-Architected reasoning, exam mapping
-│   ├── PREFLIGHT_CHECKS.md       # Setup verification runbook: command, purpose, expected result, errors
-│   ├── BUILD_PLAN.md             # Build order and decisions, each mapped to Well-Architected pillars
-│   ├── ARCHITECTURE.md           # Detailed architecture & design decisions
-│   ├── DEPLOYMENT.md             # Step-by-step deployment guide
-│   ├── COST_ANALYSIS.md          # Bedrock pricing & optimization tips
-│   ├── API_REFERENCE.md          # REST API endpoint documentation
-│   └── WELL_ARCHITECTED_REVIEW.md # Well-Architected audit findings & remediation
-├── examples/                     # Example client code
-│   ├── python_client.py          # Python HTTP client
-│   └── curl_examples.sh          # cURL examples
-├── tests/                        # Unit & integration tests
-│   ├── handler.test.ts           # Lambda unit tests (Bedrock stubbed)
-│   └── test_integration.py       # End-to-end tests
-├── .gitignore
-├── README.md                     # This file
-└── LICENSE                       # MIT License
+├── bootstrap/                  # One-time account setup (administrator runs once)
+│   ├── iam/                    # Operator roles, permissions boundary, Cognito user pool
+│   └── budget/                 # AWS Budget with email alerts
+├── terraform/                  # Infrastructure as code (one file per concern)
+│   ├── bedrock.tf              # Tagged application inference profile per model alias
+│   ├── iam.tf                  # Function execution role, with permissions boundary
+│   ├── lambda.tf               # Function and its log group
+│   ├── api.tf                  # REST API, authorizer, usage plan, API keys, throttling
+│   ├── cognito.tf              # Token domain, resource server, app clients
+│   ├── monitoring.tf           # Alarms, SNS topic, optional access log and dashboard
+│   ├── variables.tf, locals.tf, outputs.tf, providers.tf, versions.tf, backend.tf
+│   ├── .terraform.lock.hcl     # Pinned provider versions and checksums
+│   └── *.example               # Templates for the gitignored terraform.tfvars and backend.hcl
+├── lambda/                     # Function source: Node.js 22, TypeScript
+│   └── src/                    # index.ts (handler), chat.ts (validation, cost), http.ts (errors),
+│                               # config.ts, metrics.ts (EMF), chat.test.ts (unit tests)
+├── examples/                   # Python client and curl examples
+├── tests/                      # Integration tests against the deployed API
+└── docs/                       # Guides, architecture, API reference, costs, review
 ```
 
 ## Quick Start
 
 ### Prerequisites
-- AWS Account with Bedrock access (Claude models)
-- Terraform >= 1.10
-- Node.js 22+ (to build the Lambda function)
-- Python 3.11+ (example client and integration tests)
-- AWS CLI v2, a recent release (2025 or later). Older 2.x versions lack commands this project uses, such as `aws bedrock list-inference-profiles`. Check with `aws --version`
+
+- An AWS account with access to Anthropic models on Amazon Bedrock
+- AWS CLI v2, a recent release (2025 or later): older versions lack commands used here, such as `aws bedrock list-inference-profiles`
+- Terraform 1.10 or later
+- Node.js 22 or later (to build the function)
+- Python 3.10 or later (examples and integration tests)
 
 ### Deploy
 
@@ -137,86 +101,36 @@ serverless_genai_reference_architecture/
 | 2. Verify the account | [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) |
 | 3. Deploy, verify, remove | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 
-In short, once the account is set up:
+In short, once the account is set up and the deploy credentials are loaded:
 
 ```bash
 npm --prefix lambda ci && npm --prefix lambda test && npm --prefix lambda run build
 terraform -chdir=terraform init "-backend-config=backend.hcl"
 terraform -chdir=terraform plan -out=tfplan
 terraform -chdir=terraform apply tfplan
+python tests/test_integration.py
+python examples/genai_client.py --from-terraform "Explain AWS Lambda in two sentences."
 ```
 
-The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). Phases 1, 2 and 4 are deployable: the authenticated, rate-limited `/v1/chat` and `/v1/models` endpoints, with per-model token and cost metrics, tracing and alarms. [DEPLOYMENT.md steps 11-15](docs/DEPLOYMENT.md#11-get-an-access-token) get a token, call the API and check the monitoring.
+`terraform -chdir=terraform destroy` removes everything the stack created.
 
-## Key Features
+## Cost
 
-:white_check_mark: **Streaming responses** - Long-running requests don't timeout; responses stream to clients in real-time
-
-:white_check_mark: **Cost observability** - Token counting + real-time cost estimation per request (CloudWatch metrics)
-
-:white_check_mark: **Model flexibility** - Switch between Bedrock models (Claude, Llama, Mistral, etc.) without code changes
-
-:white_check_mark: **Authentication** - API key validation + optional Cognito integration for enterprise IAM
-
-:white_check_mark: **Error handling** - Graceful degradation, retry logic, detailed error messages
-
-:white_check_mark: **Observability** - CloudWatch Logs, X-Ray tracing, custom metrics for latency & cost
-
-:white_check_mark: **Security** - IAM least-privilege, VPC endpoint support, encrypted CloudWatch logs
-
-:white_check_mark: **Terraform modules** - Reusable, production-ready, easy to fork and customize
-
-## Architecture Decisions
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed rationale on:
-- Why Lambda + API Gateway (vs. ECS/Fargate)?
-- Streaming implementation (chunked transfer encoding)
-- Cost tracking strategy
-- Authentication approaches
-- Scaling patterns
+About **$0.60 per month** fixed while deployed (CloudWatch alarms); everything else is pay-per-request and dominated by model tokens - a short answer from the `fast` alias costs a few thousandths of a cent. Throttles, quotas, a `max_tokens` cap, a daily cost alarm and an account budget limit spend. Details in [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md).
 
 ## Well-Architected Review
 
-The deployed stack is audited against all six pillars of the AWS Well-Architected Framework. Findings, risk levels and remediation status are tracked in [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md).
-
-## Cost Estimate
-
-**Per 1M tokens (typical month):**
-- Bedrock (Claude 3 Sonnet) - ~$3–5
-- Lambda (compute) - <$1
-- API Gateway - <$1
-- CloudWatch (logs + metrics) - ~$1–2
-- **Total - ~$5–9 per million tokens**
-
-See [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) for detailed breakdown and cost optimization tips.
-
-## Exam Alignment (AWS Certified Generative AI Developer – Professional)
-
-This build aligns with **AIP-C01 Domains 1 & 2:**
-
-| Domain | Topics Covered |
-|--------|----------------|
-| **D1: Foundation Model Integration (31%)** | Bedrock Converse API, model selection, prompt engineering, token counting |
-| **D2: Implementation & Integration (26%)** | Lambda, API Gateway, IAM, error handling, streaming, observability |
+The deployed stack is reviewed against all six pillars of the AWS Well-Architected Framework, using a read-only identity so the review can't change what it examines. Findings, risk levels and remediation status are in [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md).
 
 ## What's Next
 
 This is the foundation for a series of builds that extend it into a complete GenAI platform on AWS:
+
 - **RAG** - Bedrock Knowledge Bases, embeddings, managed vector store
-- **Security & guardrails** - Bedrock Guardrails, VPC endpoints, KMS, invocation logging
-- **Agents** - Bedrock Agents / AgentCore with Lambda action groups
-- **Evaluation, monitoring & cost routing** - model evaluation, prompt caching, model routing
+- **Security and guardrails** - Bedrock Guardrails, VPC endpoints, KMS, invocation logging
+- **Agents** - Bedrock Agents with Lambda action groups
+- **Evaluation, monitoring and cost routing** - model evaluation, prompt caching, model routing
 
 ## Contributing
 
-This is a reference architecture - feel free to fork, customize, and share improvements. Link back to this repo if you publish enhancements.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file.
-
----
-
-**Questions?** See the docs or file an issue.
-
-**Want to learn more?** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) or [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+This is a reference architecture: fork it, adapt it, and share improvements.

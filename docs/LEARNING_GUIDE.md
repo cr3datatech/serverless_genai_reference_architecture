@@ -85,20 +85,21 @@ Follow a single call to `POST /v1/chat`:
  ① Client ──HTTPS + token + API key──► ② API Gateway ──► ③ Lambda ──► ④ Bedrock (Claude)
                                            │                 │              │
                                            ▼                 ▼              ▼
-                                    ⑥ access log      ⑤ structured log   token usage
-                                       X-Ray trace       EMF metrics      returned to Lambda
-                                       throttle check    X-Ray subsegment
+                                    ⑥ API metrics     ⑤ structured log   token usage
+                                       throttle check    EMF metrics      returned to Lambda
+                                       (access log and   X-Ray trace
+                                        X-Ray optional)
 ```
 
 | Step | Component | What happens | What can go wrong | 🏛️ Pillar |
 |---|---|---|---|---|
 | ⓪ | **Client → Cognito** | Before calling the API, the client exchanges its client ID and secret for an **access token** (OAuth client-credentials flow). It reuses the token until it expires, about an hour later, so this happens rarely | Wrong secret → no token; the client can't call the API at all | Security, Cost |
 | ① | **Client** | Sends `POST /v1/chat` with the token (`Authorization: Bearer`), its API key (`x-api-key`), and a JSON body: a model *alias* (`fast`, `balanced`, `best`), messages, and `stream` true/false | Missing or expired token, missing API key | Security |
-| ② | **API Gateway** | The Cognito authorizer checks the token's signature, expiry and scope. API Gateway then checks the API key against its **usage plan** (throttle + quota), validates the basic request shape, and invokes Lambda | Bad token → `401`; wrong scope → `403`; over quota or throttled → `429` | Security, Reliability, Cost |
+| ② | **API Gateway** | The Cognito authorizer checks the token's signature, expiry and scope. API Gateway then checks the API key against its **usage plan** (throttle + quota), validates the basic request shape, and invokes Lambda | Bad token or wrong scope → `401`; missing API key → `403`; over quota or throttled → `429` | Security, Reliability, Cost |
 | ③ | **Lambda** | Validates the body (size, `max_tokens` cap, allowed roles), resolves the alias to an **allowlisted model**, and calls the Bedrock **Converse** (or **ConverseStream**) API | Invalid input or unknown alias → `400` | Security, Cost |
 | ④ | **Bedrock** | Runs the model. The request goes through an **inference profile**, which may route it to another region in the same geography that has spare capacity | Bedrock throttling → mapped to `429`; model not enabled → `500` with a safe message | Reliability, Performance Efficiency |
 | ⑤ | **Lambda** | Reads **token usage** from the response, multiplies by a price table to estimate cost, writes one structured log line that also carries **metrics** (EMF), and returns the answer, or streams it word by word | A failure here mustn't lose the answer - logging problems are reported, not returned to the client | Operational Excellence, Cost |
-| ⑥ | **API Gateway** | Writes an access log entry and closes the X-Ray trace, so the request can be followed end to end by its request ID | - | Operational Excellence |
+| ⑥ | **API Gateway** | Returns the response and records its own metrics (requests, errors, latency). Optionally it also writes an access log entry and an X-Ray segment; both are off by default in this build because they need account-level setup ([ARCHITECTURE.md](ARCHITECTURE.md#known-limitations-and-trade-offs)) | - | Operational Excellence |
 
 The response includes the answer, token counts, an estimated cost, and a request ID that links the client's view to logs and traces.
 
@@ -149,7 +150,7 @@ The response includes the answer, token counts, an estimated cost, and a request
 |---|---|---|
 | Lambda rather than containers (ECS/Fargate) | Operational Excellence, Cost Optimization, Sustainability | Requests are short and bursty; no servers or idle capacity; scales to zero |
 | **arm64 (Graviton)** | Cost Optimization, Sustainability | Lower price per GB-second and lower energy use for the same work |
-| **Reserved concurrency** cap | Cost Optimization, Reliability | Hard limit on simultaneous model calls - protects both the bill and the account's Bedrock quota |
+| **Reserved concurrency** cap, where the account allows it | Cost Optimization, Reliability | Hard limit on simultaneous model calls - protects both the bill and the account's Bedrock quota. Not possible in an account whose concurrency limit is 10 (Lambda keeps 10 unreserved); this build then relies on API Gateway throttling ([BUILD_PLAN.md](BUILD_PLAN.md) D9) |
 | **Node.js 22 + TypeScript** runtime | Performance Efficiency, Operational Excellence | The only managed runtime with native response streaming, so no extra adapter layer or container image to maintain; TypeScript's types catch request-shape mistakes before deploy. Python (the other common choice) would need the Lambda Web Adapter |
 | **Streaming** responses | Performance Efficiency | Users see the first words in about a second instead of waiting for the full answer; long answers don't hit request timeouts |
 | Minimal execution role, capped by a **permissions boundary** | Security | Even a mistaken policy can't give the function more than the boundary allows |
@@ -187,7 +188,7 @@ This project uses a **REST API**: it is the only option offering per-client usag
 | REST API with **usage plans** | Cost Optimization, Reliability | Per-client throttle and quota; one client can't starve others or run up cost |
 | **Cognito machine-to-machine tokens** checked by a Cognito authorizer, *plus* an API key (see [BUILD_PLAN.md](BUILD_PLAN.md) D2) | Security, Cost Optimization | The token proves *who* is calling (authentication) and carries scopes (authorisation); the API key ties the caller to a usage plan (metering and limits). API keys alone are identifiers, not credentials. Cognito charges only per token issued and clients reuse tokens until expiry, so the cost is negligible |
 | Alternatives considered: IAM (SigV4) auth, API key only | Security | SigV4 is strong but requires every caller to hold AWS credentials; API key only would be flagged by a Well-Architected review. Both are recorded in [BUILD_PLAN.md](BUILD_PLAN.md) so the trade-off is visible |
-| **Access logging** and **X-Ray tracing** on the stage | Operational Excellence | Every request is recorded and traceable end to end |
+| **X-Ray tracing** on the function; **access logging** and **X-Ray** on the stage optional | Operational Excellence | Every request the function handles is traced and logged; the stage-level options add the gateway's share once the account-level prerequisites are in place ([PREFLIGHT_CHECKS.md](PREFLIGHT_CHECKS.md) 5.1, 5.2) |
 | **Stage-level throttling** as a global ceiling | Reliability, Cost Optimization | Protects the backend even if a usage plan is misconfigured |
 
 ### 4.4 IAM: least privilege and permissions boundaries

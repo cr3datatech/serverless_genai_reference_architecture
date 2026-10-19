@@ -253,6 +253,17 @@ In the console: **CloudWatch -> All metrics -> PowerLab/GenAIApi** for the model
 
 **Why these four alarms:** each is something an operator would act on. *5xx* means clients are getting failures (**Reliability**). *p95 latency* catches slowness that an average hides (**Performance Efficiency**). *Lambda throttles* matters because Lambda concurrency is shared by every function in the account and region (**Reliability**). *Daily cost* reacts within minutes, unlike the account budget, which reports actual charges hours later (**Cost Optimization**). Everything else is visible in metrics without paying for an alarm.
 
+### 16. Integration tests (all of steps 12-13 in one command)
+
+| | |
+|---|---|
+| **Command** | `python tests/test_integration.py` |
+| **Purpose** | Ten end-to-end tests against the deployed stage: models list, a chat call through every alias, the `max_tokens` cap, and every refusal (no token, forged token, no API key, unknown route, five kinds of invalid body, streaming, oversized body). Settings are read from the Terraform outputs, so the deploy credentials must be loaded |
+| **Expected** | `Ran 10 tests in ...s` then `OK`. Costs well under $0.01 |
+| **Common errors** | `Could not read Terraform outputs`: load the credentials (step 2). A `429` failure: the `demo` client's quota or throttle was hit; wait and rerun |
+
+Run it after every deploy or code change. Unit tests (step 5) prove the function's logic; this proves the deployed system, including the parts unit tests can't reach: authorizer, API keys, throttling and IAM (**Operational Excellence**: *test and validate changes*).
+
 ---
 
 ## Change
@@ -274,13 +285,13 @@ Add a name to `api_clients` in `terraform.tfvars` (for example `["demo", "report
 
 ### Change the function code
 
-Edit `lambda/src`, then steps 5, 6, 7 and 12. The plan shows only the function `updated in-place`.
+Edit `lambda/src`, then steps 5, 6, 7 and 16. The plan shows only the function `updated in-place`.
 
 ---
 
 ## Remove
 
-### 16. Destroy the stack
+### 17. Destroy the stack
 
 | | |
 |---|---|
