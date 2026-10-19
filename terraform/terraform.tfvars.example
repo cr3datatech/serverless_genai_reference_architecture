@@ -5,9 +5,35 @@ aws_region = "<region>"
 # Alias -> system-defined inference profile. Use profiles from your region's
 # geography (list them with `aws bedrock list-inference-profiles`). A
 # geographic prefix such as "eu." keeps requests inside that geography;
-# "global." profiles may route anywhere.
+# "global." profiles may route anywhere. If a model is "not available for this
+# account" (docs/PREFLIGHT_CHECKS.md 6.3), map the alias to an older model
+# that passes check 6.2, e.g. "<geo>.anthropic.claude-haiku-4-5-20251001-v1:0".
+#
+# price_per_mtok (USD per million tokens) drives cost_estimate_usd. The values
+# below are Anthropic list prices; check the Amazon Bedrock pricing page for
+# your region and profile type (docs/COST_ANALYSIS.md) and update them.
 models = {
-  fast     = { source_inference_profile_id = "<geo>.anthropic.claude-haiku-5-5" }
-  balanced = { source_inference_profile_id = "<geo>.anthropic.claude-sonnet-5-5" }
-  best     = { source_inference_profile_id = "<geo>.anthropic.claude-opus-5-5" }
+  fast = {
+    source_inference_profile_id = "<geo>.anthropic.claude-haiku-5-5"
+    price_per_mtok              = { input = 0.10, output = 0.50 }
+  }
+  balanced = {
+    source_inference_profile_id = "<geo>.anthropic.claude-sonnet-5-5"
+    price_per_mtok              = { input = 2, output = 10 }
+  }
+  best = {
+    source_inference_profile_id = "<geo>.anthropic.claude-opus-5-5"
+    price_per_mtok              = { input = 4, output = 20 }
+  }
 }
+
+# User pool created in bootstrap/iam (check 3.2 in docs/PREFLIGHT_CHECKS.md).
+cognito_user_pool_id = "<pool-id>"
+
+# Optional overrides (defaults shown):
+# default_model   = "fast"
+# max_tokens_cap  = 1024
+# api_clients     = ["demo"]
+# stage_name      = "lab"
+# stage_throttle  = { rate_limit = 5, burst_limit = 10 }
+# client_throttle = { rate_limit = 2, burst_limit = 5, daily_request = 500 }

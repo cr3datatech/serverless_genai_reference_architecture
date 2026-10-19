@@ -52,3 +52,9 @@ lambda/package/
 Thumbs.db
 .vscode/
 .idea/
+
+# --- Node.js (lambda/) ---
+node_modules/
+lambda/dist/
+lambda/dist-test/
+.build/

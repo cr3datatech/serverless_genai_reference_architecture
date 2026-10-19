@@ -14,8 +14,8 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 
 | Phase | Creates | Status |
 |---|---|---|
-| 1 - Foundation | Lambda execution role (with permissions boundary); one tagged Bedrock application inference profile per model alias | Available |
-| 2 - Non-streaming path | Lambda function, REST API, API key, usage plan, Cognito authorizer | Planned |
+| 1 - Foundation | Lambda execution role (with permissions boundary); one tagged Bedrock application inference profile per model alias | Deployed |
+| 2 - Non-streaming path | Lambda function and log group; REST API (`POST /v1/chat`, `GET /v1/models`) with Cognito authorizer, API keys, usage plan and stage throttling; Cognito domain, resource server and one app client per API client | Deployed |
 | 3 onward | See [BUILD_PLAN.md](BUILD_PLAN.md) | Planned |
 
 ---
@@ -28,7 +28,7 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 |---|---|
 | **Commands** | `cp terraform/terraform.tfvars.example terraform/terraform.tfvars` and `cp terraform/backend.hcl.example terraform/backend.hcl` |
 | **Purpose** | Account-specific settings live in these two files, which are gitignored |
-| **Then edit** | `terraform.tfvars`: the region and the inference profile IDs from [preflight check 6.1](PREFLIGHT_CHECKS.md#61-claude-inference-profiles-available). `backend.hcl`: the region and a state bucket name `powerlab-tfstate-<unique-suffix>` (bucket names are global, so add a random suffix, e.g. 8 hex characters) |
+| **Then edit** | `terraform.tfvars`: the region, the inference profile IDs from [preflight check 6.1](PREFLIGHT_CHECKS.md#61-claude-inference-profiles-available) and their prices, and the user pool ID from [preflight check 3.1](PREFLIGHT_CHECKS.md#31-exactly-one-lab-user-pool-exists). `backend.hcl`: the region and a state bucket name `powerlab-tfstate-<unique-suffix>` (bucket names are global, so add a random suffix, e.g. 8 hex characters) |
 | **Check** | `git status` must **not** list either file. If it does, `.gitignore` is missing an entry; don't commit them |
 
 ### 2. Load deploy credentials into the shell
@@ -100,28 +100,47 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 ## Deploy
 
-### 5. Plan
+### 5. Build the function
+
+| | |
+|---|---|
+| **Commands** | `npm --prefix lambda ci` then `npm --prefix lambda test` then `npm --prefix lambda run build` |
+| **Purpose** | Installs the exact dependency versions from `lambda/package-lock.json`, type-checks and runs the unit tests (request validation, cost estimate, error mapping; no AWS calls), then bundles `lambda/src` into `lambda/dist/index.js`. Terraform zips `lambda/dist` and redeploys the function whenever the bundle changes |
+| **Expected** | `pass 6`, `fail 0`, then a bundle of a few KB: `dist\index.js 6.1kb` |
+
+The AWS SDK is not bundled: the Lambda Node.js runtime provides it, which keeps the package tiny and cold starts fast (**Performance Efficiency**). The trade-off is that AWS controls the SDK version at runtime; the version used for type-checking and tests is pinned in `package.json`.
+
+**Common errors**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `npm: command not found` | Node.js not installed | Install Node.js 22 or later ([preflight check 1.3](PREFLIGHT_CHECKS.md#13-nodejs-version)) |
+| Plan: `error archiving directory: could not archive missing directory` | This step was skipped, so `lambda/dist` doesn't exist | Run the build, then plan again |
+| Apply: `CreateFunction, decomposing request: bufio.Scanner: token too long` | The upload is too large for the provider's request handling. Happens if the AWS SDK is bundled into the package | Keep `--external:@aws-sdk/*` in the `build` script |
+
+### 6. Plan
 
 | | |
 |---|---|
 | **Command** | `terraform -chdir=terraform plan -out=tfplan` |
 | **Purpose** | Shows exactly what will be created, changed or destroyed, without changing anything. Saving the plan guarantees that what is applied is what was reviewed |
-| **Expected (phase 1)** | `Plan: 5 to add, 0 to change, 0 to destroy.` (one IAM role, one inline role policy, three application inference profiles) |
+| **Expected (first deploy)** | `Plan: 29 to add, 0 to change, 0 to destroy.` with the default single API client (5 resources for phase 1, 24 for phase 2) |
 
 **Common errors**
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | `reading Bedrock Inference Profile (...): ResourceNotFoundException` | A profile ID in `terraform.tfvars` doesn't exist in this region | Copy IDs exactly from [preflight check 6.1](PREFLIGHT_CHECKS.md#61-claude-inference-profiles-available) |
+| `No value for required variable "cognito_user_pool_id"` | `terraform.tfvars` predates phase 2 | Add `cognito_user_pool_id` (see `terraform.tfvars.example`) |
 | `ExpiredToken` | Credentials from step 2 expired | Repeat step 2 |
 
-### 6. Apply
+### 7. Apply
 
 | | |
 |---|---|
 | **Command** | `terraform -chdir=terraform apply tfplan` |
 | **Purpose** | Creates exactly what the saved plan showed |
-| **Expected** | `Apply complete! Resources: 5 added, 0 changed, 0 destroyed.` followed by the outputs `lambda_role_arn` and `model_aliases` |
+| **Expected** | `Apply complete!` followed by the outputs `api_url`, `token_url`, `oauth_scope`, `client_ids`, `model_aliases` and `lambda_role_arn`, with `client_secrets` and `api_keys` shown as `<sensitive>` |
 
 **Common errors**
 
@@ -129,15 +148,17 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 |---|---|---|
 | `AccessDenied ... iam:CreateRole` | The role would be created without the permissions boundary, or the boundary name differs from `permissions_boundary_name` | The boundary must be `policy/control/powerlab-boundary` (bootstrap/iam). This error means the guardrail is working |
 | `AccessDenied ... bedrock:CreateInferenceProfile` | `powerlab-deploy-services` policy not attached | [Preflight check 2.5](PREFLIGHT_CHECKS.md#25-deploy-role-has-both-policies-attached) |
-| `Saved plan is stale` | Something changed after planning | Run step 5 again |
+| `AccessDenied ... cognito-idp:...` | `cognito_user_pool_id` differs from the pool named in the `powerlab-deploy-services` policy | Use the pool created in bootstrap; the deploy role may manage only that one ([preflight check 2.6](PREFLIGHT_CHECKS.md#26-services-policy-names-the-right-user-pool)) |
+| `Domain already exists` on the Cognito domain | Another account uses the same prefix in this region | Change the prefix in `cognito.tf`; it must be unique per region |
 | `ValidationException: Value at 'description' failed to satisfy constraint: ... ([0-9a-zA-Z:.][ _-]?)+` | Bedrock inference profile descriptions allow only letters, digits, `:` and `.`, separated by single spaces, `_` or `-` (no quotes, arrows or other punctuation) | Fixed in `bedrock.tf`; if you customise descriptions, keep to that pattern |
+| `Saved plan is stale` | Something changed after planning | Run step 6 again |
 | Some resources created, others failed | Terraform applies what it can and records it in state | Fix the cause, then plan and apply again: Terraform creates only what's missing. A failed apply never needs manual cleanup first |
 
 ---
 
 ## Verify
 
-### 7. The Lambda role carries the boundary
+### 8. The Lambda role carries the boundary
 
 | | |
 |---|---|
@@ -145,7 +166,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | **Purpose** | Confirms the workload role is capped by the boundary |
 | **Expected** | `arn:aws:iam::<account-id>:policy/control/powerlab-boundary` |
 
-### 8. The application inference profiles exist and are tagged
+### 9. The application inference profiles exist and are tagged
 
 | | |
 |---|---|
@@ -153,24 +174,99 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | **Purpose** | Confirms one profile per alias |
 | **Expected** | `powerlab-genai-api-fast`, `powerlab-genai-api-balanced`, `powerlab-genai-api-best`, each `ACTIVE` |
 
-### 9. A model call through an application profile
+### 10. A model call through an application profile
 
 | | |
 |---|---|
 | **Command** | `aws bedrock-runtime converse --region <region> --model-id <fast-profile-arn> --messages '[{"role":"user","content":[{"text":"Reply with the single word: hello"}]}]' --query 'output.message.content[0].text' --output text` |
-| **Purpose** | Proves the tagged profile works end to end. `<fast-profile-arn>` is the `fast` entry of `terraform -chdir=terraform output model_aliases` |
+| **Purpose** | Proves the tagged profile works on its own, before the API is involved. `<fast-profile-arn>` is the `fast` entry of `terraform -chdir=terraform output model_aliases` |
 | **Expected** | `hello` |
 | **Common errors** | As [preflight check 6.2](PREFLIGHT_CHECKS.md#62-one-real-model-call). `AccessDeniedException ... bedrock:InvokeModel on resource ...application-inference-profile/...` means the account's `powerlab-deploy` policy predates application-profile support: apply the current `powerlab-deploy-policy.json` as a new policy version ([bootstrap/iam: Updating an existing setup](../bootstrap/iam/README.md#updating-an-existing-setup)). In PowerShell versions before 7.3, run it in Git Bash if the JSON is rejected |
+
+### 11. Get an access token
+
+A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sends its client ID and secret to the Cognito token endpoint and receives an access token valid for 60 minutes. These commands keep the secret, the API key and the token in shell variables; don't paste them into files or tickets.
+
+| | |
+|---|---|
+| **Commands (Bash / Git Bash)** | `API=$(terraform -chdir=terraform output -raw api_url); TOKEN_URL=$(terraform -chdir=terraform output -raw token_url); SCOPE=$(terraform -chdir=terraform output -raw oauth_scope)` then `CID=$(terraform -chdir=terraform output -json client_ids \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])"); CSEC=$(terraform -chdir=terraform output -json client_secrets \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])"); KEY=$(terraform -chdir=terraform output -json api_keys \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])")` then `TOKEN=$(curl -s -d "grant_type=client_credentials&scope=$SCOPE&client_id=$CID&client_secret=$CSEC" "$TOKEN_URL" \| python -c "import sys,json;print(json.load(sys.stdin)['access_token'])"); echo ${#TOKEN}` |
+| **Commands (PowerShell)** | `$api = terraform -chdir=terraform output -raw api_url; $tokenUrl = terraform -chdir=terraform output -raw token_url; $scope = terraform -chdir=terraform output -raw oauth_scope` then `$cid = (terraform -chdir=terraform output -json client_ids \| ConvertFrom-Json).demo; $csec = (terraform -chdir=terraform output -json client_secrets \| ConvertFrom-Json).demo; $key = (terraform -chdir=terraform output -json api_keys \| ConvertFrom-Json).demo` then `$token = (Invoke-RestMethod -Method Post -Uri $tokenUrl -Body @{grant_type='client_credentials'; scope=$scope; client_id=$cid; client_secret=$csec}).access_token; $token.Length` |
+| **Purpose** | Reads the endpoints and the `demo` client's credentials from Terraform, then requests a token |
+| **Expected** | A number around 800-900: the token's length (the token itself isn't printed) |
+
+**Common errors**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `invalid_client` | Wrong client ID or secret | Read them again from the Terraform outputs |
+| `invalid_scope` or `unauthorized_client` | Scope doesn't match `oauth_scope`, or the app client doesn't allow the client-credentials flow | Use the `oauth_scope` output; check `cognito.tf` |
+| `Could not resolve host` | The Cognito domain was created moments ago | Wait a minute and retry |
+
+### 12. Call the API
+
+| | |
+|---|---|
+| **Commands (Bash / Git Bash)** | `curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $KEY" "$API/v1/models"` and `curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $KEY" -H "content-type: application/json" -d '{"model":"fast","messages":[{"role":"user","content":"Reply with the single word: hello"}]}' "$API/v1/chat"` |
+| **Commands (PowerShell)** | `$h = @{Authorization="Bearer $token"; 'x-api-key'=$key}` then `Invoke-RestMethod -Uri "$api/v1/models" -Headers $h` and `Invoke-RestMethod -Method Post -Uri "$api/v1/chat" -Headers $h -ContentType 'application/json' -Body '{"model":"fast","messages":[{"role":"user","content":"Reply with the single word: hello"}]}'` |
+| **Purpose** | Exercises the full path: token check, API key and usage plan, function, application inference profile, model |
+| **Expected (models)** | `{"data":[{"id":"balanced",...},{"id":"best",...},{"id":"fast",...,"default":true}]}` |
+| **Expected (chat)** | `{"output":"hello","stop_reason":"end_turn","usage":{"input_tokens":14,"output_tokens":4},"cost_estimate_usd":0.000034,"model":{"alias":"fast",...},"request_id":"..."}`. The cost depends on the prices in `terraform.tfvars`. Repeat with `"model":"balanced"` and `"model":"best"` |
+| **Common errors** | Every error the API returns is listed in [API_REFERENCE.md](API_REFERENCE.md#errors). In Windows PowerShell 5.1, `curl` is an alias for `Invoke-WebRequest`: use the PowerShell commands, or `curl.exe` |
+
+### 13. The guardrails refuse what they should
+
+| Request (Bash, in step 11's shell) | Expected |
+|---|---|
+| No token: `curl -s -w ' [%{http_code}]' -H "x-api-key: $KEY" "$API/v1/models"` | `UNAUTHORIZED` `[401]` |
+| No API key: `curl -s -w ' [%{http_code}]' -H "Authorization: Bearer $TOKEN" "$API/v1/models"` | `INVALID_API_KEY` `[403]` |
+| Unapproved model: `curl -s -w ' [%{http_code}]' -H "Authorization: Bearer $TOKEN" -H "x-api-key: $KEY" -d '{"model":"gpt","messages":[{"role":"user","content":"hi"}]}' "$API/v1/chat"` | `invalid_request` `[400]`, listing the allowed aliases |
+| Unknown route: `curl -s -w ' [%{http_code}]' -H "x-api-key: $KEY" "$API/v1/nope"` | `not_found` `[404]` |
+
+🏛️ **Well-Architected:** testing the refusals, not just the happy path, is evidence for the review that authentication, the model allowlist and input validation actually work (**Security**).
+
+### 14. The function logs metadata only
+
+| | |
+|---|---|
+| **Command (Bash / Git Bash)** | `MSYS_NO_PATHCONV=1 aws logs filter-log-events --region <region> --log-group-name /aws/lambda/powerlab-genai-api-chat --filter-pattern '{ $.request_id = * }' --query 'events[].message' --output text` |
+| **Command (PowerShell)** | The same line without `MSYS_NO_PATHCONV=1` |
+| **Purpose** | Shows the one JSON line the function writes per request |
+| **Expected** | Lines with `request_id`, `route`, `client_id`, `model`, `input_tokens`, `output_tokens`, `cost_estimate_usd`, `model_latency_ms`, `status` and `latency_ms`, and **no** prompt or response text (D8) |
+| **Common errors** | `... on resource: ...log-group:C:/Program Files/Git/aws/lambda/...`: Git Bash converted the log group name into a Windows path. Keep `MSYS_NO_PATHCONV=1` |
+
+---
+
+## Change
+
+### Remap a model alias
+
+| | |
+|---|---|
+| **When** | A model is retired, a newer one is approved, or a model is "not available for this account" ([preflight 6.3](PREFLIGHT_CHECKS.md#63-enable-model-access)) |
+| **How** | Test the candidate with [preflight check 6.2](PREFLIGHT_CHECKS.md#62-one-real-model-call), change its `source_inference_profile_id` and `price_per_mtok` in `terraform.tfvars`, then steps 6, 7 and 12 |
+| **Expected plan** | The changed alias's application inference profile `must be replaced` (its source can't be changed in place, so it gets a new ARN), the Lambda role policy `updated in-place` to allow the new model only, and the function `updated in-place` with the new ARN |
+| **Effect on clients** | None: clients send the alias, not the ARN |
+
+🏛️ **Well-Architected:** a model change is a reviewed configuration change, not a code change (**Operational Excellence**), and the role's permissions follow the allowlist automatically (**Security**: least privilege).
+
+### Add an API client
+
+Add a name to `api_clients` in `terraform.tfvars` (for example `["demo", "reporting"]`), then steps 6, 7 and 11. Each client gets its own Cognito app client and API key, so one can be throttled, rotated or removed without affecting the others (**Security**, **Reliability**). Removing a name deletes that client's credentials.
+
+### Change the function code
+
+Edit `lambda/src`, then steps 5, 6, 7 and 12. The plan shows only the function `updated in-place`.
 
 ---
 
 ## Remove
 
-### 10. Destroy the stack
+### 15. Destroy the stack
 
 | | |
 |---|---|
 | **Command** | `terraform -chdir=terraform destroy` |
 | **Purpose** | Removes everything Terraform created. Run it between work sessions: the stack rebuilds in minutes and nothing bills while it's gone |
 | **Expected** | A plan listing every resource to destroy, a `yes` confirmation, then `Destroy complete!` |
-| **Not removed** | The state bucket and everything from `bootstrap/` (IAM, Cognito user pool, budget). These are account foundations shared by deployments |
+| **Not removed** | The state bucket and everything from `bootstrap/` (IAM, Cognito user pool, budget). These are account foundations shared by deployments. The Cognito domain, resource server and app clients *are* removed, so the pool returns to its bootstrap state |
+| **After a rebuild** | The API URL, client secret and API key change; read them again (step 11) |

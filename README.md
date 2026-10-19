@@ -23,6 +23,8 @@ This repository is built to be learned from, not just deployed. Every design dec
 | [bootstrap/iam/README.md](bootstrap/iam/README.md) | Least-privilege IAM set up *before* anything is deployed: temporary credentials, MFA, permissions boundaries - the Well-Architected Security pillar in practice |
 | [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Well-Architected Cost Optimization pillar in practice, and why Bedrock model charges need special handling |
 | [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) | Every setup and verification command with its purpose, expected response and common errors - run before the first deploy |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, deploy, verify end to end (token, API calls, the refusals) and remove the stack |
+| [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | The API contract: authentication, request and response fields, every error, and the limits |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
 
 ## Architecture
@@ -138,12 +140,13 @@ serverless_genai_reference_architecture/
 In short, once the account is set up:
 
 ```bash
+npm --prefix lambda ci && npm --prefix lambda test && npm --prefix lambda run build
 terraform -chdir=terraform init "-backend-config=backend.hcl"
 terraform -chdir=terraform plan -out=tfplan
 terraform -chdir=terraform apply tfplan
 ```
 
-The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). The API endpoint and test examples arrive with phase 2.
+The stack is built in phases ([BUILD_PLAN.md](docs/BUILD_PLAN.md)). Phases 1 and 2 are deployable: the authenticated, rate-limited `/v1/chat` and `/v1/models` endpoints. [DEPLOYMENT.md steps 11-14](docs/DEPLOYMENT.md#11-get-an-access-token) get a token and call the API.
 
 ## Key Features
 
