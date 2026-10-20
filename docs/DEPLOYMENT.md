@@ -6,6 +6,15 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 
 **Where to run the commands:** a **local terminal** (not CloudShell), in the **repository root**, and in the **same terminal window** throughout. The credentials loaded in step 2 exist only in that window.
 
+**Prerequisites:** every step below starts with a **Before you run** line naming what must already be done. The two that catch people out:
+
+| Needs | Why | Lasts |
+|---|---|---|
+| **Deploy credentials loaded** ([step 2](#2-load-deploy-credentials-into-the-shell)) | Every `aws` and `terraform` command, including reading Terraform outputs, runs as the deploy role | About an hour, and only in the terminal window where step 2 ran. A new window, or `ExpiredToken`, means running step 2 again |
+| **Shell variables from [step 11](#11-get-an-access-token)** (`API`, `KEY`, `TOKEN`; in PowerShell `$api`, `$key`, `$token`) | Steps 12 and 13 use them in place of the real URL, API key and token | Only in the window where step 11 ran. The token expires after 60 minutes: run step 11 again |
+
+**Coming back later** (stack already deployed, new terminal): run step 2, then step 4 only if this is a fresh clone (no `terraform/.terraform` folder), then step 11 before calling the API. Steps 1, 3 and 5-7 aren't needed again unless something changed.
+
 **About `terraform -chdir=terraform`:** Terraform reads the `.tf` files in its working directory, and this project keeps them in the `terraform/` subfolder. `-chdir=terraform` runs the command as if from inside that folder, so AWS CLI and Terraform commands can all run from the repository root. Equivalently, `cd terraform` once and drop the `-chdir=terraform` part (`terraform init "-backend-config=backend.hcl"`, `terraform plan -out=tfplan`, ...). Either way, `backend.hcl` and `tfplan` are read from and written to `terraform/`.
 
 🏛️ **Well-Architected:** deployment is fully automated, repeatable and reversible (**Operational Excellence**: *perform operations as code*, *make frequent, small, reversible changes*). Credentials are temporary and MFA-backed (**Security**). Teardown is one command, so nothing is left running and billing (**Cost Optimization**, **Sustainability**).
@@ -27,6 +36,7 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 
 | | |
 |---|---|
+| **Before you run** | The repository is cloned and you're in its root folder. The [preflight checks](PREFLIGHT_CHECKS.md) pass, and you have the inference profile IDs (check 6.1) and the Cognito user pool ID (check 3.1) to hand. No AWS credentials needed |
 | **Commands** | `cp terraform/terraform.tfvars.example terraform/terraform.tfvars` and `cp terraform/backend.hcl.example terraform/backend.hcl` |
 | **Purpose** | Account-specific settings live in these two files, which are gitignored |
 | **Then edit** | `terraform.tfvars`: the region, the inference profile IDs from [preflight check 6.1](PREFLIGHT_CHECKS.md#61-claude-inference-profiles-available) and their prices, and the user pool ID from [preflight check 3.1](PREFLIGHT_CHECKS.md#31-exactly-one-lab-user-pool-exists). `backend.hcl`: the region and a state bucket name `powerlab-tfstate-<unique-suffix>` (bucket names are global, so add a random suffix, e.g. 8 hex characters) |
@@ -38,6 +48,7 @@ Terraform can't prompt for an MFA code, so the AWS CLI performs the MFA sign-in 
 
 | | |
 |---|---|
+| **Before you run** | AWS CLI v2 with the `powerlab-deploy` profile configured and working ([preflight check 2.1](PREFLIGHT_CHECKS.md#21-deploy-role-works)), and your MFA device. Run it again in every new terminal window and whenever a command reports `ExpiredToken` |
 | **Command (PowerShell)** | `aws configure export-credentials --profile powerlab-deploy --format powershell \| Invoke-Expression` |
 | **Command (Bash / Git Bash)** | `eval "$(aws configure export-credentials --profile powerlab-deploy --format env)"` |
 | **Purpose** | Sets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` for this terminal only. Nothing is written to disk |
@@ -55,6 +66,8 @@ Terraform can't prompt for an MFA code, so the AWS CLI performs the MFA sign-in 
 | `get-caller-identity` shows a different identity | Other credentials set in the environment or a default profile | Open a fresh terminal and repeat this step |
 
 ### 3. Create the Terraform state bucket
+
+**Before you run:** step 2 in this terminal, and the bucket name chosen in step 1 (`backend.hcl`). The last row, the lifecycle rule, needs an **administrator** session in CloudShell instead.
 
 Run once per account. The deploy role may only create buckets named `powerlab-tfstate-*`.
 
@@ -86,6 +99,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | Steps 1-3 done, and step 2 in this terminal. Needed once per clone; run it again after a fresh clone, or when `backend.hcl` or the provider versions change |
 | **Command** | `terraform -chdir=terraform init "-backend-config=backend.hcl"` |
 | **Purpose** | Downloads the AWS provider (versions pinned by the committed `.terraform.lock.hcl`) and connects to the state bucket |
 | **Expected** | `Terraform has been successfully initialized!` |
@@ -107,9 +121,10 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | Node.js 22 or later ([preflight check 1.3](PREFLIGHT_CHECKS.md#13-nodejs-version)). No AWS credentials needed. Run it again after every change in `lambda/src` |
 | **Commands** | `npm --prefix lambda ci` then `npm --prefix lambda test` then `npm --prefix lambda run build` |
 | **Purpose** | Installs the exact dependency versions from `lambda/package-lock.json`, type-checks and runs the unit tests (request validation, cost estimate, error mapping; no AWS calls), then compiles `lambda/src/*.ts` to `lambda/dist/*.js`. Terraform zips `lambda/dist` and redeploys the function whenever it changes |
-| **Expected** | `pass 6`, `fail 0`, then no output from the build; `lambda/dist` holds `index.js`, `chat.js`, `config.js` and `http.js` (about 12 KB in total) |
+| **Expected** | `pass 7`, `fail 0`, then no output from the build; `lambda/dist` holds `index.js`, `chat.js`, `config.js`, `http.js` and `metrics.js` (about 14 KB in total) |
 
 **Why plain compiled JavaScript, not a bundle:** the function's only runtime dependency is the AWS SDK, which the Lambda Node.js runtime already provides. So the TypeScript compiler's output is deployed as is: one `.js` file per source file, with the comments kept. It reads almost line for line like `lambda/src`, so the code can be followed in the Lambda console (**Operational Excellence**: code that operators can read), and the package stays tiny, which keeps cold starts fast (**Performance Efficiency**). The trade-off is that AWS controls the SDK version at runtime; the version used for type-checking and tests is pinned in `package.json`. If a later build adds other dependencies, bundling (for example with esbuild, already used for the tests) becomes necessary.
 
@@ -125,6 +140,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | Steps 4 and 5 done, `terraform.tfvars` filled in (step 1), and step 2 in this terminal within the last hour |
 | **Command** | `terraform -chdir=terraform plan -out=tfplan` |
 | **Purpose** | Shows exactly what will be created, changed or destroyed, without changing anything. Saving the plan guarantees that what is applied is what was reviewed |
 | **Expected (first deploy)** | `Plan: 34 to add, 0 to change, 0 to destroy.` with the default single API client and no `alarm_email` (5 resources for phase 1, 24 for phase 2, 5 for phase 4); one more with `alarm_email` set, and one more with `enable_access_logs = true` |
@@ -141,6 +157,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | Step 6 run in this terminal, producing `terraform/tfplan`, with nothing changed since. Credentials from step 2 still valid |
 | **Command** | `terraform -chdir=terraform apply tfplan` |
 | **Purpose** | Creates exactly what the saved plan showed |
 | **Expected** | `Apply complete!` followed by the outputs `alarm_topic_arn`, `api_url`, `token_url`, `oauth_scope`, `client_ids`, `model_aliases` and `lambda_role_arn`, with `client_secrets` and `api_keys` shown as `<sensitive>`. With `alarm_email` set, AWS emails a subscription confirmation link: click it, or no alarm emails arrive |
@@ -167,6 +184,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | The stack is deployed (step 7), and step 2 in this terminal |
 | **Command** | `aws iam get-role --role-name powerlab-genai-api-lambda --query 'Role.PermissionsBoundary.PermissionsBoundaryArn' --output text` |
 | **Purpose** | Confirms the workload role is capped by the boundary |
 | **Expected** | `arn:aws:iam::<account-id>:policy/control/powerlab-boundary` |
@@ -175,6 +193,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | The stack is deployed (step 7), and step 2 in this terminal. Replace `<region>` with the deployment region |
 | **Command** | `aws bedrock list-inference-profiles --region <region> --type-equals APPLICATION --query "inferenceProfileSummaries[].[inferenceProfileName,status]" --output text` |
 | **Purpose** | Confirms one profile per alias |
 | **Expected** | `powerlab-genai-api-fast`, `powerlab-genai-api-balanced`, `powerlab-genai-api-best`, each `ACTIVE` |
@@ -183,6 +202,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 
 | | |
 |---|---|
+| **Before you run** | The stack is deployed (step 7), and step 2 in this terminal. Get `<fast-profile-arn>` first from `terraform -chdir=terraform output model_aliases` |
 | **Command** | `aws bedrock-runtime converse --region <region> --model-id <fast-profile-arn> --messages '[{"role":"user","content":[{"text":"Reply with the single word: hello"}]}]' --query 'output.message.content[0].text' --output text` |
 | **Purpose** | Proves the tagged profile works on its own, before the API is involved. `<fast-profile-arn>` is the `fast` entry of `terraform -chdir=terraform output model_aliases` |
 | **Expected** | `hello` |
@@ -194,6 +214,7 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 
 | | |
 |---|---|
+| **Before you run** | The stack is deployed (step 7), step 2 in this terminal (Terraform outputs are read from the state in S3), and you're in the repository root. Bash also needs `curl` and Python 3.10 or later. Use the same window for steps 12 and 13: the variables set here exist only in it |
 | **Commands (Bash / Git Bash)** | `API=$(terraform -chdir=terraform output -raw api_url); TOKEN_URL=$(terraform -chdir=terraform output -raw token_url); SCOPE=$(terraform -chdir=terraform output -raw oauth_scope)` then `CID=$(terraform -chdir=terraform output -json client_ids \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])"); CSEC=$(terraform -chdir=terraform output -json client_secrets \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])"); KEY=$(terraform -chdir=terraform output -json api_keys \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])")` then `TOKEN=$(curl -s -d "grant_type=client_credentials&scope=$SCOPE&client_id=$CID&client_secret=$CSEC" "$TOKEN_URL" \| python -c "import sys,json;print(json.load(sys.stdin)['access_token'])"); echo ${#TOKEN}` |
 | **Commands (PowerShell)** | `$api = terraform -chdir=terraform output -raw api_url; $tokenUrl = terraform -chdir=terraform output -raw token_url; $scope = terraform -chdir=terraform output -raw oauth_scope` then `$cid = (terraform -chdir=terraform output -json client_ids \| ConvertFrom-Json).demo; $csec = (terraform -chdir=terraform output -json client_secrets \| ConvertFrom-Json).demo; $key = (terraform -chdir=terraform output -json api_keys \| ConvertFrom-Json).demo` then `$token = (Invoke-RestMethod -Method Post -Uri $tokenUrl -Body @{grant_type='client_credentials'; scope=$scope; client_id=$cid; client_secret=$csec}).access_token; $token.Length` |
 | **Purpose** | Reads the endpoints and the `demo` client's credentials from Terraform, then requests a token |
@@ -211,6 +232,7 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 
 | | |
 |---|---|
+| **Before you run** | Step 11 run **in this same terminal window** within the last 60 minutes, so `API`, `KEY` and `TOKEN` (PowerShell: `$api`, `$key`, `$token`) are set. Check with `echo ${#TOKEN}` (PowerShell: `$token.Length`): 0 means run step 11 first |
 | **Commands (Bash / Git Bash)** | `curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $KEY" "$API/v1/models"` and `curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $KEY" -H "content-type: application/json" -d '{"model":"fast","messages":[{"role":"user","content":"Reply with the single word: hello"}]}' "$API/v1/chat"` |
 | **Commands (PowerShell)** | `$h = @{Authorization="Bearer $token"; 'x-api-key'=$key}` then `Invoke-RestMethod -Uri "$api/v1/models" -Headers $h` and `Invoke-RestMethod -Method Post -Uri "$api/v1/chat" -Headers $h -ContentType 'application/json' -Body '{"model":"fast","messages":[{"role":"user","content":"Reply with the single word: hello"}]}'` |
 | **Purpose** | Exercises the full path: token check, API key and usage plan, function, application inference profile, model |
@@ -219,6 +241,8 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 | **Common errors** | Every error the API returns is listed in [API_REFERENCE.md](API_REFERENCE.md#errors). In Windows PowerShell 5.1, `curl` is an alias for `Invoke-WebRequest`: use the PowerShell commands, or `curl.exe` |
 
 ### 13. The guardrails refuse what they should
+
+**Before you run:** as step 12: step 11 in this same terminal within the last 60 minutes. These commands are Bash only; in PowerShell use `curl.exe` and `$key`, `$token`, `$api`.
 
 | Request (Bash, in step 11's shell) | Expected |
 |---|---|
@@ -233,6 +257,7 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 
 | | |
 |---|---|
+| **Before you run** | Step 2 in this terminal, and at least one request made (step 12 or 16) in the last 14 days, the log retention period |
 | **Command (Bash / Git Bash)** | `MSYS_NO_PATHCONV=1 aws logs filter-log-events --region <region> --log-group-name /aws/lambda/powerlab-genai-api-chat --filter-pattern '{ $.request_id = * }' --query 'events[].message' --output text` |
 | **Command (PowerShell)** | The same line without `MSYS_NO_PATHCONV=1` |
 | **Purpose** | Shows the one JSON line the function writes per request |
@@ -240,6 +265,8 @@ A client proves who it is with the OAuth 2.0 **client-credentials** flow: it sen
 | **Common errors** | `... on resource: ...log-group:C:/Program Files/Git/aws/lambda/...`: Git Bash converted the log group name into a Windows path. Keep `MSYS_NO_PATHCONV=1` |
 
 ### 15. Metrics, traces and alarms
+
+**Before you run:** step 2 in this terminal, and requests made in the last hour (step 12 or 16). Get `<alarm_topic_arn>` from `terraform -chdir=terraform output -raw alarm_topic_arn`.
 
 Make a few calls first (step 12), then wait 1-2 minutes: CloudWatch extracts metrics from the log lines asynchronously.
 
@@ -259,6 +286,7 @@ In the console: **CloudWatch -> All metrics -> PowerLab/GenAIApi** for the model
 
 | | |
 |---|---|
+| **Before you run** | The stack is deployed (step 7), step 2 in this terminal, Python 3.10 or later, and you're in the repository root. Step 11 isn't needed: the tests fetch their own token |
 | **Command** | `python tests/test_integration.py` |
 | **Purpose** | Ten end-to-end tests against the deployed stage: models list, a chat call through every alias, the `max_tokens` cap, and every refusal (no token, forged token, no API key, unknown route, five kinds of invalid body, streaming, oversized body). Settings are read from the Terraform outputs, so the deploy credentials must be loaded |
 | **Expected** | `Ran 10 tests in ...s` then `OK`. Costs well under $0.01 |
@@ -272,6 +300,8 @@ Run it after every deploy or code change. Unit tests (step 5) prove the function
 
 ### Remap a model alias
 
+**Before you run:** step 2 in this terminal, and step 4 done in this clone.
+
 | | |
 |---|---|
 | **When** | A model is retired, a newer one is approved, or a model is "not available for this account" ([preflight 6.3](PREFLIGHT_CHECKS.md#63-enable-model-access)) |
@@ -283,9 +313,13 @@ Run it after every deploy or code change. Unit tests (step 5) prove the function
 
 ### Add an API client
 
+**Before you run:** step 2 in this terminal, and step 4 done in this clone.
+
 Add a name to `api_clients` in `terraform.tfvars` (for example `["demo", "reporting"]`), then steps 6, 7 and 11. Each client gets its own Cognito app client and API key, so one can be throttled, rotated or removed without affecting the others (**Security**, **Reliability**). Removing a name deletes that client's credentials.
 
 ### Change the function code
+
+**Before you run:** step 2 in this terminal, and step 4 done in this clone.
 
 Edit `lambda/src`, then steps 5, 6, 7 and 16. The plan shows only the function `updated in-place`.
 
@@ -297,6 +331,7 @@ Edit `lambda/src`, then steps 5, 6, 7 and 16. The plan shows only the function `
 
 | | |
 |---|---|
+| **Before you run** | Step 2 in this terminal, and step 4 done in this clone (Terraform finds what to remove through the state in S3) |
 | **Command** | `terraform -chdir=terraform destroy` |
 | **Purpose** | Removes everything Terraform created. Run it between work sessions: the stack rebuilds in minutes and nothing bills while it's gone |
 | **Expected** | A plan listing every resource to destroy, a `yes` confirmation, then `Destroy complete!` |
