@@ -97,7 +97,7 @@ aws iam create-policy --path /control/ --policy-name powerlab-deploy \
 
 # The lab's Cognito user pool, in the deployment region (see "Why the user pool is created here")
 REGION=<deployment-region>
-POOL_ID=$(aws cognito-idp create-user-pool --region "$REGION" --pool-name powerlab-clients --user-pool-tier LITE --user-pool-tags Project=powerlab --query 'UserPool.Id' --output text)
+POOL_ID=$(aws cognito-idp create-user-pool --region "$REGION" --pool-name powerlab-clients --user-pool-tier LITE --deletion-protection ACTIVE --user-pool-tags Project=powerlab --query 'UserPool.Id' --output text)
 echo "$POOL_ID"    # keep this - it goes in terraform.tfvars
 aws iam create-policy --path /control/ --policy-name powerlab-deploy-services \
   --policy-document "$(sed "s/USER_POOL_ID/$POOL_ID/" powerlab-deploy-services-policy.json)"

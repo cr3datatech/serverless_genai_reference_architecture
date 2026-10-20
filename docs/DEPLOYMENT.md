@@ -65,11 +65,13 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 | Block all public access | `aws s3api put-public-access-block --bucket <state-bucket> --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true` |
 | Tag | `aws s3api put-bucket-tagging --bucket <state-bucket> --tagging 'TagSet=[{Key=Project,Value=powerlab},{Key=ManagedBy,Value=cli}]'` |
 | Verify | `aws s3api get-bucket-versioning --bucket <state-bucket> --query Status --output text` |
+| Expire old state versions (**administrator**, CloudShell: the deploy role can't set lifecycle rules) | `aws s3api put-bucket-lifecycle-configuration --bucket <state-bucket> --lifecycle-configuration '{"Rules":[{"ID":"expire-old-state-versions","Status":"Enabled","Filter":{},"NoncurrentVersionExpiration":{"NoncurrentDays":90,"NewerNoncurrentVersions":10}}]}'` |
 
 | | |
 |---|---|
 | **Purpose** | Terraform's state file records every resource it manages. Keeping it in a versioned, private, encrypted bucket means it's shared, recoverable, and never committed to git. Objects are encrypted by default (SSE-S3), so no extra encryption step is needed |
-| **Expected** | `create-bucket` prints a `Location`; the verify command prints `Enabled`; the other commands print nothing |
+| **Expected** | `create-bucket` prints a `Location`; the verify command prints `Enabled`; the lifecycle command prints `TransitionDefaultMinimumObjectSize` or nothing; the other commands print nothing |
+| **Lifecycle rule** | Every apply writes a new state version. The rule keeps the current state, the newest 10 earlier versions and anything from the last 90 days, and deletes the rest (🏛️ Well-Architected, Sustainability SUS04-BP03) |
 
 **Common errors**
 
@@ -125,7 +127,7 @@ Run once per account. The deploy role may only create buckets named `powerlab-tf
 |---|---|
 | **Command** | `terraform -chdir=terraform plan -out=tfplan` |
 | **Purpose** | Shows exactly what will be created, changed or destroyed, without changing anything. Saving the plan guarantees that what is applied is what was reviewed |
-| **Expected (first deploy)** | `Plan: 34 to add, 0 to change, 0 to destroy.` with the default single API client and no `alarm_email` (5 resources for phase 1, 24 for phase 2, 5 for phase 4); 35 with `alarm_email` set |
+| **Expected (first deploy)** | `Plan: 34 to add, 0 to change, 0 to destroy.` with the default single API client and no `alarm_email` (5 resources for phase 1, 24 for phase 2, 5 for phase 4); one more with `alarm_email` set, and one more with `enable_access_logs = true` |
 
 **Common errors**
 

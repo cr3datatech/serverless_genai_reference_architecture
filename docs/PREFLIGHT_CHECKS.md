@@ -234,21 +234,26 @@ Updating Terraform doesn't change the AWS provider version: that is pinned separ
 | **Command** | `aws apigateway get-account --profile powerlab-deploy --region <region> --query cloudwatchRoleArn --output text` |
 | **Purpose** | REST API logging needs one CloudWatch role per account **and region**. The deploy role can read this setting but deliberately can't change it, because it's shared by every API in the region |
 | **Expected** | An IAM role ARN: the setting already exists and nothing more is needed |
-| **When it matters** | Only for the optional API access log (`enable_access_logs = true` in `terraform.tfvars`). With `None`, the stack deploys and runs normally; the function's own log still records every request that reaches it |
+| **When it matters** | For the API access log (`enable_access_logs = true` in `terraform.tfvars`). The stack deploys without it, but requests that API Gateway refuses (bad token, missing API key, throttled) then leave no record of who sent them. 🏛️ The [Well-Architected review](WELL_ARCHITECTED_REVIEW.md) rates that a medium risk (SEC04-BP01), so set the role and turn the access log on |
 
-**If it prints `None` and the access log is wanted**, an administrator sets it once in CloudShell:
+**If it prints `None`**, an administrator sets it once in CloudShell, one command per line:
 
 | Step | Command |
 |---|---|
-| Create the role | `aws iam create-role --role-name apigateway-cloudwatch-logs --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"apigateway.amazonaws.com"},"Action":"sts:AssumeRole"}]}'` |
+| Create the role | `aws iam create-role --role-name apigateway-cloudwatch-logs --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"apigateway.amazonaws.com"},"Action":"sts:AssumeRole"}]}' --query Role.Arn --output text` |
 | Grant log permissions | `aws iam attach-role-policy --role-name apigateway-cloudwatch-logs --policy-arn arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs` |
-| Register it with API Gateway | `aws apigateway update-account --region <region> --patch-operations op=replace,path=/cloudwatchRoleArn,value=arn:aws:iam::$ACCOUNT_ID:role/apigateway-cloudwatch-logs` |
+| Register it with API Gateway | `aws apigateway update-account --region <region> --patch-operations op=replace,path=/cloudwatchRoleArn,value=$(aws iam get-role --role-name apigateway-cloudwatch-logs --query Role.Arn --output text) --query cloudwatchRoleArn --output text` |
+
+**Expected:** the role ARN; nothing; the role ARN again. Then set `enable_access_logs = true` in `terraform.tfvars` and plan and apply ([DEPLOYMENT.md](DEPLOYMENT.md) steps 6-7): the plan adds the access log group and changes the stage in place.
 
 **Common errors**
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `BadRequestException: The role ARN does not have required permissions` on `update-account` | IAM changes take a few seconds to propagate | Wait 15 seconds and retry |
+| `EntityAlreadyExists` on `create-role` | The role was created on an earlier run | Carry on with the next two commands |
+| `Unknown options` on `attach-role-policy` | Two commands were pasted onto one line | Run each command on its own line |
+| `BadRequestException: The role ARN does not have required permissions` on `update-account` | IAM changes take a few seconds to propagate, or the policy isn't attached | Run the attach command, wait 15 seconds and retry |
+| `AccessDeniedException: Cross-account pass role is not allowed` on `update-account` | The ARN has no account ID, for example from an unset shell variable | Use the command above, which looks the ARN up |
 | An unfamiliar role ARN is returned | Another workload in the account already set it | Leave it; it works for all APIs in the region. Don't replace it |
 
 ### 5.2 X-Ray tracing on the API stage (optional)
@@ -363,6 +368,48 @@ Run check 6.2 once **for each model** used by an alias (`fast`, `balanced`, `bes
 | `ACCOUNT_ID` or `POOL_ID` empty after a restart | Shell variables don't survive a CloudShell restart: `ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)`, and check 3.2 for the pool ID |
 | `MalformedPolicyDocument: Invalid principal` on `create-role` | The role's trust policy names a user that IAM can't see yet (eventual consistency). Wait about 15 seconds and retry; the bootstrap steps include this wait |
 
+## 8. Account settings from the Well-Architected review
+
+🏛️ The [Well-Architected review](WELL_ARCHITECTED_REVIEW.md) of the deployed stack found these account settings worth changing. All are free. They need an administrator in CloudShell, because the deploy role deliberately can't change account-wide settings. Run each command on its own line.
+
+### 8.1 Lambda concurrency quota (Reliability, REL01-BP04)
+
+| | |
+|---|---|
+| **Check** | `aws service-quotas get-service-quota --region <region> --service-code lambda --quota-code L-B99A9384 --query Quota.Value --output text` |
+| **Purpose** | The account-wide limit on Lambda functions running at once, shared by every function in the region. New accounts can start at 10 instead of the default 1000; with up to 5 requests per second and model calls of several seconds, 10 is not enough, and excess requests fail |
+| **Expected** | `1000.0` |
+| **If lower** | `aws service-quotas request-service-quota-increase --region <region> --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --query RequestedQuota.Status --output text` prints `PENDING` or `CASE_OPENED`; AWS decides within hours to a few days |
+| **Errors** | `ResourceAlreadyExistsException`: a request is already open. See its status with `aws service-quotas list-requested-service-quota-change-history-by-quota --region <region> --service-code lambda --quota-code L-B99A9384 --query 'RequestedQuotas[].[Status,DesiredValue,Created]' --output table` |
+
+### 8.2 Cost allocation tag (Cost Optimization, COST03-BP02)
+
+| | |
+|---|---|
+| **Command** | `aws ce update-cost-allocation-tags-status --region us-east-1 --cost-allocation-tags-status TagKey=Project,Status=Active` |
+| **Purpose** | Makes the `Project` tag usable in Cost Explorer, so model spend can be attributed to the stack through the tagged inference profiles. The console route is in [bootstrap/budget](../bootstrap/budget/README.md) |
+| **Expected** | `{"Errors": []}`; tagged costs appear from activation onwards, after up to 24 hours |
+| **Errors** | `Tag keys not found`: no tagged resource exists yet. Run it after the first deploy |
+
+### 8.3 Cognito deletion protection (Reliability, REL09-BP01)
+
+| | |
+|---|---|
+| **Check** | `aws cognito-idp describe-user-pool --region <region> --user-pool-id <pool-id> --query UserPool.DeletionProtection --output text` |
+| **Purpose** | Deleting the pool would invalidate every client credential. New pools get protection from the bootstrap command; for an existing pool, turn it on in the console |
+| **Expected** | `ACTIVE` |
+| **If `INACTIVE`** | Console: Cognito -> User pools -> `powerlab-clients` -> **Settings** (bottom of the left menu, which may need opening with ☰) -> **Deletion protection** -> Activate. Don't use `update-user-pool` from the CLI: it resets every setting not passed, including the pricing tier |
+
+### 8.4 Compute Optimizer (Performance Efficiency, PERF02-BP01)
+
+| | |
+|---|---|
+| **Command** | `aws compute-optimizer update-enrollment-status --region <region> --status Active --query status --output text` |
+| **Purpose** | Gives measured memory-size recommendations for the function, instead of the chosen 256 MB, after about 14 days of traffic |
+| **Expected** | `Active` |
+
+The other two recommended steps are in their own sections: the API Gateway logging role ([5.1](#51-account-level-cloudwatch-role)) and the state bucket lifecycle rule ([DEPLOYMENT.md step 3](DEPLOYMENT.md#3-create-the-terraform-state-bucket)).
+
 ## Checklist
 
 | # | Check | Pass when |
@@ -382,5 +429,7 @@ Run check 6.2 once **for each model** used by an alias (`fast`, `balanced`, `bes
 | 6.1 | Claude profiles | At least one `<geo>.anthropic...` `ACTIVE` |
 | 6.2 | Model call | `hello`, for **each** alias's model |
 | 6.3 | Model access | Enabled for every model an alias uses |
+| 8.1 | Lambda concurrency | `1000.0` (or an increase requested) |
+| 8.2-8.4 | Review settings | Tag active, pool protection `ACTIVE`, Compute Optimizer `Active` |
 
 When every row passes, the account is ready for Phase 1 of the [build plan](BUILD_PLAN.md).

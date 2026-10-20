@@ -102,7 +102,7 @@ Recorded so the [Well-Architected review](WELL_ARCHITECTED_REVIEW.md) can assess
 | Limitation | Why | Mitigation or plan |
 |---|---|---|
 | No streaming responses | Phase 3 (optional for this build) | Non-streaming responses are capped by `max_tokens` (1024) to stay within the 29-second limit |
-| No API Gateway access log | Needs an account-wide API Gateway CloudWatch role, set by an administrator ([preflight 5.1](PREFLIGHT_CHECKS.md#51-account-level-cloudwatch-role)) | `enable_access_logs`; the function log covers every request that passes authentication |
+| API Gateway access log off by default | Needs an account-wide API Gateway CloudWatch role, set by an administrator ([preflight 5.1](PREFLIGHT_CHECKS.md#51-account-level-cloudwatch-role)) | Set the role, then `enable_access_logs = true`, as in the reviewed deployment ([Well-Architected review](WELL_ARCHITECTED_REVIEW.md) F-003). Each line records caller IP, client, API key, status and error type, never content |
 | No X-Ray on the API stage | Enabling it needs permission to create API Gateway's service-linked role ([preflight 5.2](PREFLIGHT_CHECKS.md#52-x-ray-tracing-on-the-api-stage-optional)) | `enable_api_tracing`; API Gateway latency metrics cover the gateway's share |
 | No Lambda reserved concurrency | The account's concurrency limit leaves nothing to reserve | API Gateway throttles cap the load; throttles alarm |
 | No AWS WAF | Cost and scope; authentication, throttling and validation cover this build's threat model | Candidate for the security build |

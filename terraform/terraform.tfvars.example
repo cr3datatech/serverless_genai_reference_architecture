@@ -41,6 +41,6 @@ cognito_user_pool_id = "<pool-id>"
 # stage_throttle  = { rate_limit = 5, burst_limit = 10 }
 # client_throttle = { rate_limit = 2, burst_limit = 5, daily_request = 500 }
 # alarms             = { server_errors_5min = 3, p95_latency_ms = 20000, daily_cost_usd = 1 }
-# enable_access_logs = false # needs the account API Gateway CloudWatch role
+# enable_access_logs = true  # recommended (Well-Architected SEC04-BP01); needs the account API Gateway CloudWatch role
 # enable_api_tracing = false # needs permission to create the API Gateway service-linked role
 # enable_dashboard   = false # about 3 USD per month
