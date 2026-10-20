@@ -92,7 +92,7 @@ Each phase ends with something deployed and testable, and names the Well-Archite
 | 4 | **Observability and cost** (deployed) | Structured JSON logs; X-Ray on Lambda; EMF metrics (tokens, cost, latency by model); alarms (5xx, p95 latency, Lambda throttles, daily estimated cost) to an SNS topic. Optional, off by default: API access log (needs the account API Gateway CloudWatch role), X-Ray on the API stage (needs permission for API Gateway's service-linked role, [preflight 5.2](PREFLIGHT_CHECKS.md#52-x-ray-tracing-on-the-api-stage-optional)), dashboard (about $3/month) | Operational Excellence, Cost Optimization (visibility, alarms) |
 | 5 | **Tests, examples, docs** (done) | Unit tests (Bedrock stubbed); integration test against the deployed stage; `examples/` (Python client, curl); `ARCHITECTURE.md`, `DEPLOYMENT.md`, `API_REFERENCE.md`, `COST_ANALYSIS.md` (current Bedrock prices); README corrected to current models and features | Operational Excellence (tests, runbooks), Cost (current pricing) |
 | 6 | **Well-Architected review** (done; one medium item waits on an AWS quota increase) | Read-only six-pillar assessment of the deployed stack (scoped to `Project=powerlab`), fixes, re-assessment; sanitised results in `WELL_ARCHITECTED_REVIEW.md` | All six pillars - evidence-based review, remediation, re-review |
-| 7 | **Release** | Tagged `v1.0`, architecture diagram, write-up ("the minimal secure pattern for a GenAI endpoint on AWS"), `terraform destroy` verified clean | Operational Excellence (clean teardown), Sustainability (no leftovers) |
+| 7 | **Release** (done: v1.0, see [CHANGELOG](../CHANGELOG.md)) | Tagged `v1.0`, architecture diagram, write-up ("the minimal secure pattern for a GenAI endpoint on AWS"), `terraform destroy` verified clean | Operational Excellence (clean teardown), Sustainability (no leftovers) |
 
 ## Deploy permissions for this build
 
@@ -105,9 +105,9 @@ The core deploy policy is unchanged. The additions below live in a second policy
 ## Definition of done
 
 - `terraform apply` from a clean checkout with only `terraform.tfvars` and `backend.hcl` filled in; `terraform destroy` leaves nothing behind
-- Streaming and non-streaming calls work through the public endpoint with authentication; unauthenticated, over-quota and invalid requests are rejected with the right status codes
-- Every request has a trace, a structured log line and cost/token metrics; the dashboard and alarms work
-- Every IAM role carries the permissions boundary; Access Analyzer reports no errors or security warnings
+- Non-streaming calls work through the public endpoint with authentication; unauthenticated, over-quota and invalid requests are rejected with the right status codes. Streaming (phase 3) is optional for v1.0 and planned for a later release
+- Every request has a trace, a structured log line and cost/token metrics; the alarms work. The dashboard is optional (`enable_dashboard`, about $3/month)
+- Every workload IAM role carries the permissions boundary (the control roles under `/control/` are protected by explicit denies instead); Access Analyzer policy validation reports no errors or security warnings
 - The Well-Architected review is complete for all six pillars, with no open high-risk issues (HRIs) and every medium-risk issue (MRI) either fixed or recorded as an accepted risk with its reason
 - The repo contains no account IDs, profile names, endpoints or personal details
 

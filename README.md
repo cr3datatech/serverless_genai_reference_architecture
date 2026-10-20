@@ -12,6 +12,7 @@ It is built to be **learned from**, not just deployed. Every choice is explained
 
 | Read | To learn |
 |------|----------|
+| [docs/WRITEUP.md](docs/WRITEUP.md) | The pattern in brief: the seven ideas behind the design, what the Well-Architected review found, and what's deliberately left out |
 | [docs/LEARNING_GUIDE.md](docs/LEARNING_GUIDE.md) | What each AWS service does, how a request flows, why every choice was made and which Well-Architected pillar it serves. Includes self-check questions |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The deployed design: diagram, request walkthrough, security layers, reliability, observability, and known limitations |
 | [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md) | The build order and the architecture decisions, each tagged with its Well-Architected pillars and the options considered |
@@ -80,7 +81,9 @@ serverless_genai_reference_architecture/
 │                               # config.ts, metrics.ts (EMF), chat.test.ts (unit tests)
 ├── examples/                   # Python client and curl examples
 ├── tests/                      # Integration tests against the deployed API
-└── docs/                       # Guides, architecture, API reference, costs, review
+├── docs/                       # Write-up, guides, architecture, API reference, costs, review
+├── CHANGELOG.md                # Release notes
+└── LICENSE                     # MIT
 ```
 
 ## Quick Start
@@ -134,3 +137,7 @@ This is the foundation for a series of builds that extend it into a complete Gen
 ## Contributing
 
 This is a reference architecture: fork it, adapt it, and share improvements.
+
+## License
+
+[MIT](LICENSE).

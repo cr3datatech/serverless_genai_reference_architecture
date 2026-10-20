@@ -95,8 +95,11 @@ resource "aws_api_gateway_deployment" "api" {
       aws_api_gateway_method.route,
       aws_api_gateway_integration.route,
       aws_api_gateway_authorizer.cognito,
-      aws_api_gateway_gateway_response.json,
-      aws_api_gateway_gateway_response.not_found,
+      # Gateway responses by their settings only: AWS reads response_parameters
+      # back as an empty map after creation, which would change the hash and
+      # force a redeployment on the first plan after every fresh deploy.
+      [for r in concat(values(aws_api_gateway_gateway_response.json), [aws_api_gateway_gateway_response.not_found]) :
+      [r.response_type, r.status_code, r.response_templates]],
     ]))
   }
 
