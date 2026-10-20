@@ -16,7 +16,7 @@ Each step lists the **command**, its **purpose**, the **expected result** and **
 |---|---|---|
 | 1 - Foundation | Lambda execution role (with permissions boundary); one tagged Bedrock application inference profile per model alias | Deployed |
 | 2 - Non-streaming path | Lambda function and log group; REST API (`POST /v1/chat`, `GET /v1/models`) with Cognito authorizer, API keys, usage plan and stage throttling; Cognito domain, resource server and one app client per API client | Deployed |
-| 4 - Observability and cost | Embedded Metric Format metrics per alias (tokens, cost, model latency); X-Ray on the function; four CloudWatch alarms (5xx, p95 latency, Lambda throttles, daily estimated cost) to an SNS topic with optional email. Optional: API access log, API stage tracing, dashboard | Deployed |
+| 4 - Observability and cost | Embedded Metric Format metrics per alias (tokens, cost, model latency); X-Ray on the function; four CloudWatch alarms (5xx, p95 latency, Lambda throttles, daily estimated cost) to an SNS topic with optional email. API access log (recommended, needs the account logging role). Optional: API stage tracing, dashboard | Deployed |
 | 3, 5 onward | See [BUILD_PLAN.md](BUILD_PLAN.md) | Planned |
 
 ---
