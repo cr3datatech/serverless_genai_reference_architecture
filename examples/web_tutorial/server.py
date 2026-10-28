@@ -316,6 +316,29 @@ def identity_mfa(key: str, code: str) -> dict:
     return result(display, r, "Signed in. The temporary credentials are held in this server's memory only, for one hour.")
 
 
+def identity_export(key: str, shell: str) -> dict:
+    """Shows what export-credentials prints, with the secret values masked."""
+    c = CREDS.get(key)
+    if not c or parse_time(c["Expiration"]) < now() + dt.timedelta(minutes=1):
+        raise Fail(f"Not signed in as {PROFILES[key]}. Use Check sign-in (or Sign in with MFA) above first.")
+    if shell == "bash":
+        fmt = "env"
+        lines = ["export AWS_ACCESS_KEY_ID=****", "export AWS_SECRET_ACCESS_KEY=****",
+                 "export AWS_SESSION_TOKEN=****", f"export AWS_CREDENTIAL_EXPIRATION={c['Expiration']}"]
+    else:
+        fmt = "powershell"
+        lines = ['$Env:AWS_ACCESS_KEY_ID="****"', '$Env:AWS_SECRET_ACCESS_KEY="****"',
+                 '$Env:AWS_SESSION_TOKEN="****"', f'$Env:AWS_CREDENTIAL_EXPIRATION="{c["Expiration"]}"']
+    pipe = " | Invoke-Expression" if fmt == "powershell" else ""
+    display = f"aws configure export-credentials --profile {PROFILES[key]} --format {fmt}"
+    text = ("\n".join(lines) + "\n\n"
+            f"These four lines are what the command prints (real values masked here). In your terminal, "
+            + (f"'{pipe.strip()}' runs them" if pipe else "'eval \"$(...)\"' runs them")
+            + ", so every later aws or terraform command in that window uses these credentials, "
+            f"until {c['Expiration']}.")
+    return message(display + pipe if pipe else f'eval "$({display})"', text)
+
+
 def identity_forget(key: str) -> dict:
     CREDS.pop(key, None)
     return message(f"(forget the {PROFILES[key]} credentials held by this page)",
@@ -495,6 +518,7 @@ ACTIONS = {
     "identity.check": lambda p: identity_check(_profile(p)),
     "identity.mfa": lambda p: identity_mfa(_profile(p), str(p.get("code", "")).strip()),
     "identity.forget": lambda p: identity_forget(_profile(p)),
+    "identity.export": lambda p: identity_export(_profile(p), p.get("shell") or "ps"),
     "env.terraform": lambda p: env_terraform(p.get("names") or ENV_NAMES, p.get("client") or "demo"),
     "env.manual": lambda p: env_manual(p.get("values") or {}),
     "env.clear": lambda p: env_clear(),
