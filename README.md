@@ -20,10 +20,11 @@ It is built to be **learned from**, not just deployed. Every choice is explained
 | [bootstrap/budget/README.md](bootstrap/budget/README.md) | An AWS Budget with email alerts set up *before* anything is deployed - the Cost Optimization pillar in practice |
 | [docs/PREFLIGHT_CHECKS.md](docs/PREFLIGHT_CHECKS.md) | Every setup check with its command, purpose, expected response and common errors - run before the first deploy |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Build, deploy, verify end to end (token, API calls, refusals, metrics, integration tests) and remove the stack |
+| [docs/HOW_TO.md](docs/HOW_TO.md) | How to call the model from your own terminal (Python, Node.js, curl, PowerShell) and build it into your own code, including an AWS Lambda function |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | The API contract: authentication, request and response fields, every error, and the limits |
 | [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | Prices, measured per-request costs, scenarios, and the controls that cap spend |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
-| [examples/](examples/README.md) | A Python client and curl examples |
+| [examples/](examples/README.md) | Python and Node.js clients and curl examples |
 
 ## Architecture
 

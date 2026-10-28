@@ -1,10 +1,11 @@
 # Examples
 
-Two ways to call the deployed API. Both read their settings from the Terraform outputs, so run them from the repository root with the deploy credentials loaded ([DEPLOYMENT.md step 2](../docs/DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell)).
+Ways to call the deployed API. The commands below read their settings from the Terraform outputs, so run them from the repository root with the deploy credentials loaded ([DEPLOYMENT.md step 2](../docs/DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell)). To call the API from your own terminal or code with environment variables instead, see [HOW_TO.md](../docs/HOW_TO.md).
 
 | File | What it shows |
 |---|---|
 | [`genai_client.py`](genai_client.py) | A small Python client using only the standard library: cached OAuth token, both auth headers, retries with exponential backoff and jitter on `429` and `5xx`, errors as exceptions. Also used by the [integration tests](../tests/test_integration.py) |
+| [`genai_client.mjs`](genai_client.mjs) | The same client for Node.js 18 or later, no dependencies, configured with the same environment variables ([HOW_TO.md 2.2 and 3.2](../docs/HOW_TO.md#22-nodejs-bash-git-bash-or-powershell)) |
 | [`curl_examples.sh`](curl_examples.sh) | The same flow in Bash with curl: token, list models, chat, one refusal |
 
 ## Python

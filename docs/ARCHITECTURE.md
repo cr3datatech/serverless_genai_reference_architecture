@@ -104,7 +104,7 @@ Recorded so the [Well-Architected review](WELL_ARCHITECTED_REVIEW.md) can assess
 | No streaming responses | Phase 3 (optional for this build) | Non-streaming responses are capped by `max_tokens` (1024) to stay within the 29-second limit |
 | API Gateway access log off by default | Needs an account-wide API Gateway CloudWatch role, set by an administrator ([preflight 5.1](PREFLIGHT_CHECKS.md#51-account-level-cloudwatch-role)) | Set the role, then `enable_access_logs = true`, as in the reviewed deployment ([Well-Architected review](WELL_ARCHITECTED_REVIEW.md) F-003). Each line records caller IP, client, API key, status and error type, never content |
 | No X-Ray on the API stage | Enabling it needs permission to create API Gateway's service-linked role ([preflight 5.2](PREFLIGHT_CHECKS.md#52-x-ray-tracing-on-the-api-stage-optional)) | `enable_api_tracing`; API Gateway latency metrics cover the gateway's share |
-| No Lambda reserved concurrency | The account's concurrency limit leaves nothing to reserve | API Gateway throttles cap the load; throttles alarm |
+| No Lambda reserved concurrency | API Gateway throttles cap the load before any function or model cost; an account whose concurrency limit is 10 can't reserve any | API Gateway throttles cap the load; throttles alarm |
 | No AWS WAF | Cost and scope; authentication, throttling and validation cover this build's threat model | Candidate for the security build |
 | AWS-managed encryption keys only | Customer managed KMS keys cost $1/month each and add key policy management | Candidate for the security build |
 | Public regional endpoint, no VPC | No private resources need protecting; Bedrock and the function use AWS-managed networking | VPC endpoints are in the security build's scope |

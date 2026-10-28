@@ -2,7 +2,7 @@
 
 This architecture is audited against the six pillars of the [AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html), with the [Generative AI Lens](https://docs.aws.amazon.com/wellarchitected/latest/generative-ai-lens/generative-ai-lens.html) where it applies. The review was run against the deployed stack, its findings were fixed or given a documented disposition, and the stack was then re-assessed to confirm the fixes.
 
-> **Status:** Reviewed 2026-10-19 (A1, workload review); re-assessed 2026-10-20 (A6, after remediation). **0 high and 1 medium open risk** for the workload, down from 0 high, 3 medium and 3 low. The remaining medium item is waiting on an AWS quota increase.
+> **Status:** Reviewed 2026-10-19 (A1, workload review); re-assessed 2026-10-20 (A6, after remediation) and 2026-10-28 (A6, after the quota increase). **No open risks** for the workload, down from 0 high, 3 medium and 3 low.
 
 ## Method
 
@@ -13,7 +13,7 @@ This architecture is audited against the six pillars of the [AWS Well-Architecte
 | **Identity** | The read-only review role from [bootstrap/iam](../bootstrap/iam/README.md) (AWS `ReadOnlyAccess`, MFA required), so the review can't change what it examines |
 | **Tooling** | The AWS-Best-Practices-Agent-Team assessment toolkit: a baseline sweep of read-only API calls, deep dives (IAM, S3, Compute Optimizer, Cost Explorer, Config, Well-Architected Tool) and targeted reads of each resource. Every call, including failures, is recorded as evidence |
 | **Evidence rule** | Every finding cites a Well-Architected best-practice ID and the configuration evidence behind it. A finding is marked remediated only when new evidence shows the fix, not on the strength of a change having been made |
-| **Assessment types** | **A1**, full workload review against all six pillars. **A6**, re-assessment: the same sweep with the same scope, diffed against A1 |
+| **Assessment types** | **A1**, full workload review against all six pillars. **A6**, re-assessment: the same sweep with the same scope, diffed against the previous assessment |
 | **Framework edition** | Best-practice IDs follow the Well-Architected Framework published November 6, 2024. AWS renumbers best practices between editions |
 | **What's published here** | Pillar verdicts, findings and their dispositions. Account identifiers, resource ARNs and raw evidence are not published |
 
@@ -30,17 +30,17 @@ Only **open** findings count in the scorecard. The other dispositions are **reme
 
 ## Scorecard
 
-Open findings for the workload, per pillar, after the re-assessment (A6). The A1 column shows the starting point.
+Open findings for the workload, per pillar, after each assessment. The A1 column shows the starting point.
 
-| Pillar | A1 open (H / M / L) | A6 open (H / M / L) | Verdict |
-|--------|------|------|---------|
-| Operational Excellence | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Practices met: the whole workload is code, tagged, with runbooks and tests |
-| Security | 0 / 1 / 0 | 0 / 0 / 0 | ✅ Least privilege, authentication on every method, metadata-only logs; refused requests are now logged. WAF and invocation logging are deferred to the security build |
-| Reliability | 0 / 1 / 1 | 0 / 1 / 0 | 🟠 One open item: the account's Lambda concurrency quota (increase requested) |
-| Performance Efficiency | 0 / 0 / 1 | 0 / 0 / 0 | ✅ Compute Optimizer enrolled; memory recommendation due after 14 days of traffic |
-| Cost Optimization | 0 / 1 / 0 | 0 / 0 / 0 | ✅ Spend bounded by quotas, throttles, a token cap, an alarm and a budget; costs now attributable by tag |
-| Sustainability | 0 / 0 / 1 | 0 / 0 / 0 | ✅ Arm64 serverless, no idle resources, short retention; old state versions now expire |
-| **Total** | **0 / 3 / 3** | **0 / 1 / 0** | |
+| Pillar | A1 2026-10-19 (H / M / L) | A6 2026-10-20 | A6 2026-10-28 | Verdict |
+|--------|------|------|------|---------|
+| Operational Excellence | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Practices met: the whole workload is code, tagged, with runbooks and tests |
+| Security | 0 / 1 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Least privilege, authentication on every method, metadata-only logs; refused requests are now logged. WAF and invocation logging are deferred to the security build |
+| Reliability | 0 / 1 / 1 | 0 / 1 / 0 | 0 / 0 / 0 | ✅ Alarms, tracing and deletion protection in place; the account's Lambda concurrency is now the default 1000 |
+| Performance Efficiency | 0 / 0 / 1 | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Compute Optimizer enrolled; a memory recommendation appears once there is enough invocation history |
+| Cost Optimization | 0 / 1 / 0 | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Spend bounded by quotas, throttles, a token cap, an alarm and a budget; costs now attributable by tag |
+| Sustainability | 0 / 0 / 1 | 0 / 0 / 0 | 0 / 0 / 0 | ✅ Arm64 serverless, no idle resources, short retention; old state versions now expire |
+| **Total** | **0 / 3 / 3** | **0 / 1 / 0** | **0 / 0 / 0** | |
 
 **Account context** (not counted above, owned by the account owner): no CloudTrail trail (rated high for the account), and GuardDuty, Security Hub, AWS Config and IAM Access Analyzer not enabled (medium). See [Account context](#account-context).
 
@@ -48,7 +48,7 @@ Open findings for the workload, per pillar, after the re-assessment (A6). The A1
 
 | ID | Pillar | Best practice | Risk | Finding | Remediation | Status |
 |----|--------|---------------|------|---------|-------------|--------|
-| F-001 | Reliability | REL01-BP04 | 🟠 Medium | The account's Lambda concurrency quota is 10 (AWS default 1000) and is shared with other workloads. At 5 requests per second and model calls of several seconds, peak demand can exceed it, and the excess fails | Request the default 1000 through Service Quotas ([PREFLIGHT 8.1](PREFLIGHT_CHECKS.md#81-lambda-concurrency-quota-reliability-rel01-bp04)). The throttles alarm stays | ⏳ **Open**: increase requested 2026-10-20, awaiting AWS |
+| F-001 | Reliability | REL01-BP04 | 🟠 Medium | The account's Lambda concurrency quota was 10 (AWS default 1000) and is shared with other workloads. At 5 requests per second and model calls of several seconds, peak demand could exceed it, and the excess would fail | Default 1000 requested through Service Quotas ([PREFLIGHT 8.1](PREFLIGHT_CHECKS.md#81-lambda-concurrency-quota-reliability-rel01-bp04)) and granted. The throttles alarm stays | ✅ Remediated (A6, 2026-10-28): account limit 1000, request closed |
 | F-002 | Cost Optimization | COST03-BP02 | 🟠 Medium | The `Project` cost allocation tag was inactive, so model spend couldn't be attributed to the stack in Cost Explorer | Tag activated ([PREFLIGHT 8.2](PREFLIGHT_CHECKS.md#82-cost-allocation-tag-cost-optimization-cost03-bp02)) | ✅ Remediated (A6) |
 | F-003 | Security | SEC04-BP01 | 🟠 Medium | Requests refused by API Gateway (bad token, no API key, throttled) left no record of who sent them: no access log | Account logging role set ([PREFLIGHT 5.1](PREFLIGHT_CHECKS.md#51-account-level-cloudwatch-role)) and `enable_access_logs = true`. One JSON line per request with caller IP, client, API key, status and error type, never content. Stage tracing stays optional ([PREFLIGHT 5.2](PREFLIGHT_CHECKS.md#52-x-ray-tracing-on-the-api-stage-optional)) | ✅ Remediated (A6): a refused request was seen in the log |
 | F-006 | Reliability | REL09-BP01 | 🟡 Low | The Cognito user pool had deletion protection off; deleting it would invalidate every client credential | Protection turned on; the bootstrap now creates the pool protected ([PREFLIGHT 8.3](PREFLIGHT_CHECKS.md#83-cognito-deletion-protection-reliability-rel09-bp01)) | ✅ Remediated (A6) |
@@ -76,7 +76,7 @@ Open findings for the workload, per pillar, after the re-assessment (A6). The A1
 | F-009 | Deferred | Prompt and answer capture needs its own privacy controls | Security build |
 | F-011 | Not applicable | The review is recorded here and repeated as re-assessments | - |
 
-Also out of scope for this build, and listed in [ARCHITECTURE.md](ARCHITECTURE.md#known-limitations-and-trade-offs): streaming, VPC endpoints, Bedrock Guardrails and reserved concurrency.
+Also out of scope for this build, and listed in [ARCHITECTURE.md](ARCHITECTURE.md#known-limitations-and-trade-offs): streaming, VPC endpoints and Bedrock Guardrails. Reserved concurrency on the function is now possible (the account limit is 1000) but not configured: the API Gateway throttles already cap the load before any function or model cost.
 
 ## Account context
 
@@ -93,3 +93,4 @@ These controls are account-wide and not created by this stack. In a shared accou
 |------|------|---------|
 | 2026-10-19 | A1 - workload review | All six pillars. 19 findings: 0 high, 3 medium, 3 low open; 6 practices met; 2 accepted risks; 4 deferred (2 of them account context); 1 not applicable |
 | 2026-10-20 | A6 - re-assessment | Same scope and role. 5 findings remediated with new evidence (F-002, F-003, F-006, F-008, F-010); F-001 open pending an AWS quota increase; no regressions or new findings; accepted and deferred items re-confirmed. Open: 0 high, 1 medium, 0 low |
+| 2026-10-28 | A6 - re-assessment | Same scope and role, after a fresh-clone rebuild of the stack. F-001 remediated with new evidence (account Lambda concurrency 1000, increase request closed); earlier fixes re-confirmed; no regressions or new findings; accepted and deferred items re-surfaced unchanged. Open: 0 high, 0 medium, 0 low |

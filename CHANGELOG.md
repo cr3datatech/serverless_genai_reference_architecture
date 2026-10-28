@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **F-001 remediated:** the account's Lambda concurrency limit is now the default 1000. A second Well-Architected re-assessment (A6, 2026-10-28) leaves no open workload risks ([WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md))
+- Deployment guide: every step states its prerequisites ("Before you run")
+- [HOW_TO.md](docs/HOW_TO.md): calling the model from your own terminal (Python, Node.js, curl, PowerShell) and from your own code, including an AWS Lambda function pattern
+- `examples/genai_client.mjs`: a dependency-free Node.js client matching the Python one
+
 ## v1.0 - 2026-10-20
 
 First release of the serverless GenAI reference architecture: a Well-Architected gateway to foundation models on Amazon Bedrock.
