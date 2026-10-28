@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1 - 2026-10-28
 
 - **F-001 remediated:** the account's Lambda concurrency limit is now the default 1000. A second Well-Architected re-assessment (A6, 2026-10-28) leaves no open workload risks ([WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md))
 - Deployment guide: every step states its prerequisites ("Before you run")
