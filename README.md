@@ -24,7 +24,7 @@ It is built to be **learned from**, not just deployed. Every choice is explained
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | The API contract: authentication, request and response fields, every error, and the limits |
 | [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | Prices, measured per-request costs, scenarios, and the controls that cap spend |
 | [docs/WELL_ARCHITECTED_REVIEW.md](docs/WELL_ARCHITECTED_REVIEW.md) | The six-pillar review of the deployed stack: findings, risk ratings and how each was resolved |
-| [examples/](examples/README.md) | Python and Node.js clients and curl examples |
+| [examples/](examples/README.md) | Python and Node.js clients, curl examples, and a web tutorial that runs and explains every command |
 
 ## Architecture
 

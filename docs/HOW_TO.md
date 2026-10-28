@@ -13,6 +13,8 @@ How to use the deployed API from your own terminal (Bash, Git Bash or PowerShell
 | [5. Errors and retries](#5-errors-and-retries) | Know which errors to retry and which to fix |
 | [6. Give each application its own client](#6-give-each-application-its-own-client) | Separate credentials, throttle and quota per application |
 
+**Prefer a guided version?** [examples/web_tutorial](../examples/web_tutorial/README.md) is a local web page that walks through sections 1-5, runs each command for you and explains its output. Start it with `python examples/web_tutorial/server.py`.
+
 **Before anything here:** the stack is deployed ([DEPLOYMENT.md](DEPLOYMENT.md) steps 1-7). Run the commands from the repository root.
 
 ## 1. Get the connection settings
@@ -144,6 +146,7 @@ export GENAI_API_URL="<api-url>" GENAI_TOKEN_URL="<token-url>" GENAI_SCOPE="<sco
 |---|---|---|
 | `Error: No outputs found` or `Backend initialization required` | Not run from the repository root, or `terraform init` not done in this clone | `cd` to the repository root; [DEPLOYMENT.md step 4](DEPLOYMENT.md#4-initialise-terraform) |
 | `ExpiredToken` or `NoCredentialProviders` | Deploy credentials not loaded in this window, or expired | [DEPLOYMENT.md step 2](DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell) |
+| `No valid credential sources found`, often with `login session has expired, please reauthenticate`, repeated six times, then `0 0` | The deploy credentials loaded in this window have expired (they last about an hour), so Terraform fell back to the machine's default AWS sign-in, which has expired too | Run both commands under **Before you run** again in this window, then the command again |
 | `KeyError: 'demo'` / empty value | No client called `demo` in `api_clients` | Use a name from `terraform -chdir=terraform output -json client_ids` |
 | Lengths print `0 0` | Part of the command failed, or it ran in a different window | Read the error above the numbers; run the command again in the window you will use |
 

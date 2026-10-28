@@ -6,6 +6,7 @@ Ways to call the deployed API. The commands below read their settings from the T
 |---|---|
 | [`genai_client.py`](genai_client.py) | A small Python client using only the standard library: cached OAuth token, both auth headers, retries with exponential backoff and jitter on `429` and `5xx`, errors as exceptions. Also used by the [integration tests](../tests/test_integration.py) |
 | [`genai_client.mjs`](genai_client.mjs) | The same client for Node.js 18 or later, no dependencies, configured with the same environment variables ([HOW_TO.md 2.2 and 3.2](../docs/HOW_TO.md#22-nodejs-bash-git-bash-or-powershell)) |
+| [`web_tutorial/`](web_tutorial/README.md) | A web page that is a tutorial and a terminal in one: sign in, set the six settings, prompt the model and see the refusals, with an explanation of every command. Start it with `python examples/web_tutorial/server.py` |
 | [`curl_examples.sh`](curl_examples.sh) | The same flow in Bash with curl: token, list models, chat, one refusal |
 
 ## Python

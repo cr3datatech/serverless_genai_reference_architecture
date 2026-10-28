@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GenAI API Tutorial</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5b6475; --line: #dde1e8;
+  --accent: #2557d6; --accent-soft: #e8eefc; --ok: #1f7a4a; --ok-soft: #e4f4ea;
+  --warn: #9a5b00; --warn-soft: #fdf1dc; --bad: #b42318; --bad-soft: #fde8e6;
+  --term-bg: #0f1420; --term-text: #d7dce6; --term-dim: #8a93a6; --term-cmd: #8fb4ff; --term-err: #ff9d8f;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151c; --panel: #181d26; --text: #e4e8ef; --muted: #9aa3b4; --line: #2a313d;
+    --accent: #7ea2ff; --accent-soft: #1f2a44; --ok: #5fcf92; --ok-soft: #173326;
+    --warn: #f0b860; --warn-soft: #3a2c12; --bad: #ff8b7d; --bad-soft: #3d1b18;
+    --term-bg: #0a0d14;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, Menlo, monospace; font-size: 13px; }
+code { background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+.bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.bar h1 { font-size: 17px; margin: 0 12px 0 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 10px; border-radius: 99px; background: var(--bad-soft); color: var(--bad); white-space: nowrap; }
+.pill.on { background: var(--ok-soft); color: var(--ok); }
+.pill.part { background: var(--warn-soft); color: var(--warn); }
+.shell { margin-left: auto; font-size: 13px; color: var(--muted); }
+.shell label { margin-left: 8px; cursor: pointer; }
+main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 80px; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
+nav.toc a { font-size: 13px; text-decoration: none; padding: 4px 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); }
+section { margin-top: 34px; }
+section > h2 { font-size: 22px; margin: 0 0 6px; }
+.lead { color: var(--muted); margin: 0 0 14px; max-width: 820px; }
+.concepts { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
+.concepts h3 { margin: 0 0 8px; font-size: 15px; }
+.concepts dl { margin: 0; display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 16px; }
+.concepts dt { font-weight: 600; }
+.concepts dd { margin: 0; color: var(--muted); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin: 14px 0; overflow: hidden; }
+.card > .head { padding: 14px 18px 4px; }
+.card h3 { margin: 0; font-size: 17px; }
+.card .what { margin: 6px 0 0; }
+.explain { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; padding: 4px 18px 6px; }
+.explain h4 { margin: 12px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.explain ol, .explain ul { margin: 0; padding-left: 20px; }
+.explain li { margin: 3px 0; }
+.explain p { margin: 0; }
+.wa { margin: 8px 18px 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; font-size: 14px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 14px 18px; border-top: 1px solid var(--line); margin-top: 12px; }
+.controls label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 3px; }
+input, select, textarea { font: inherit; font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+textarea { width: 100%; min-height: 64px; resize: vertical; }
+.grow { flex: 1 1 260px; }
+button { font: inherit; font-size: 14px; border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 7px 14px; border-radius: 6px; cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .55; cursor: wait; }
+.term { background: var(--term-bg); color: var(--term-text); margin: 0; padding: 12px 16px; white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto; display: none; }
+.term.show { display: block; }
+.term .cmd { color: var(--term-cmd); }
+.term .err { color: var(--term-err); }
+.term .dim { color: var(--term-dim); }
+.own { border-top: 1px solid var(--line); padding: 10px 18px 14px; }
+.own summary { cursor: pointer; font-size: 14px; color: var(--accent); }
+.own pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; position: relative; }
+.own .copy { position: absolute; top: 6px; right: 6px; font-size: 12px; padding: 2px 8px; }
+.own p { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
+table.vars { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+table.vars th, table.vars td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.vars th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.status-yes { color: var(--ok); font-weight: 600; }
+.status-no { color: var(--bad); }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.flow div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.flow span { color: var(--muted); }
+.notice { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 14px; }
+.scroll { overflow-x: auto; }
+@media (max-width: 760px) {
+  .explain { grid-template-columns: 1fr; }
+  .concepts dl { grid-template-columns: 1fr; }
+  .shell { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>GenAI API tutorial</h1>
+    <span class="pill" id="pill-deploy">deploy: not signed in</span>
+    <span class="pill" id="pill-review">review: not signed in</span>
+    <span class="pill" id="pill-env">settings: 0 / 6</span>
+    <span class="shell">Show own-terminal commands for:
+      <label><input type="radio" name="shell" value="ps" checked> PowerShell</label>
+      <label><input type="radio" name="shell" value="bash"> Bash / Git Bash</label>
+    </span>
+  </div>
+</header>
+<main>
+  <nav class="toc">
+    <a href="#intro">How this page works</a>
+    <a href="#step1">1. Sign in to AWS</a>
+    <a href="#step2">2. Connection settings</a>
+    <a href="#step3">3. Look inside a token</a>
+    <a href="#step4">4. Prompt the model</a>
+    <a href="#step5">5. What the API refuses</a>
+    <a href="#step6">6. Clean up</a>
+  </nav>
+
+  <section id="intro">
+    <h2>How this page works</h2>
+    <p class="lead">This page is a tutorial and a terminal in one. Every step explains what a command does and why, runs the real command when you press its button, and shows the real output, just as a terminal would. Each card also shows the same command for your own terminal, so you can repeat everything without this page. The guide behind it is <code>docs/HOW_TO.md</code>.</p>
+    <div class="flow">
+      <div>Your browser<br><span>this page</span></div><span>&rarr;</span>
+      <div>Tutorial server<br><span>python, on your machine</span></div><span>&rarr;</span>
+      <div><code>aws</code> / <code>terraform</code> / <code>python</code> / <code>node</code><br><span>the same commands you'd type</span></div><span>&rarr;</span>
+      <div>AWS<br><span>Cognito, API Gateway, Lambda, Bedrock</span></div>
+    </div>
+    <div class="concepts">
+      <h3>Why there is a server, and what keeps it safe</h3>
+      <dl>
+        <dt>Why a server</dt><dd>A web page can't run programs on your computer. <code>examples/web_tutorial/server.py</code> runs them for the page and sends back their output.</dd>
+        <dt>This machine only</dt><dd>It listens on <code>127.0.0.1</code>, an address no other computer can reach.</dd>
+        <dt>Fixed commands only</dt><dd>It runs only the commands on this page. What you type (a question, an MFA code) is passed as data, never as a command, and is checked first.</dd>
+        <dt>Secrets stay hidden</dt><dd>AWS credentials, the client secret, the API key and access tokens stay in the server's memory. The page shows only their length, and output is scrubbed of them.</dd>
+        <dt>Nothing is saved</dt><dd>Stopping the server (Ctrl+C in its terminal) forgets everything it held. Your terminal's own AWS sign-in is not changed.</dd>
+        <dt>Cost</dt><dd>Sign-in and settings are free. Each model call costs a fraction of a US cent; the cost is printed with every answer.</dd>
+      </dl>
+    </div>
+    <p class="lead">Work through the steps in order: step 2 needs step 1, and steps 3-5 need step 2.</p>
+  </section>
+
+  <section id="step1">
+    <h2>1. Sign in to AWS</h2>
+    <p class="lead">AWS needs to know who you are before Terraform can read the connection settings in step 2. This step checks, or makes, a sign-in for each of the two profiles. Only the deploy profile is needed for the rest of the page; the review profile is here so you can see the difference.</p>
+    <div class="concepts">
+      <h3>Concepts</h3>
+      <dl>
+        <dt>Profile</dt><dd>A named set of AWS CLI settings in <code>~/.aws/config</code>. <code>--profile powerlab-deploy</code> tells a command which settings to use.</dd>
+        <dt>IAM role</dt><dd>A set of permissions you take on for a while, instead of having them permanently. Each profile here points at a role (<code>role_arn</code>).</dd>
+        <dt>Two roles, two jobs</dt><dd><b>powerlab-deploy</b> can create and change this stack's resources. <b>powerlab-review</b> can only read, and is used for the Well-Architected review. Separate roles mean a review can never change anything (least privilege, Well-Architected SEC03-BP02).</dd>
+        <dt>MFA</dt><dd>Multi-factor authentication: a 6-digit code from an app on your phone, needed to take on either role. A stolen access key alone is not enough (SEC02-BP01).</dd>
+        <dt>Temporary credentials</dt><dd>Taking on a role returns credentials that expire after one hour. Nothing long-lived is handed out.</dd>
+        <dt>STS</dt><dd>AWS Security Token Service, which issues those temporary credentials and answers "who am I?".</dd>
+      </dl>
+    </div>
+    <div id="cards-step1"></div>
+  </section>
+
+  <section id="step2">
+    <h2>2. Set the six connection settings</h2>
+    <p class="lead">A program needs six values to call the API. This step reads them from the deployment (Terraform) and holds them for the next steps, exactly like the environment variables in <code>docs/HOW_TO.md</code> section 1. After this step no AWS credentials are used at all: the API calls in steps 3-5 use only these six values.</p>
+    <div class="scroll">
+      <table class="vars" id="vars">
+        <thead><tr><th>Variable</th><th>What it is, in plain words</th><th>Why it's needed</th><th>Comes from</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="cards-step2"></div>
+  </section>
+
+  <section id="step3">
+    <h2>3. Look inside an access token</h2>
+    <p class="lead">Every API call starts by swapping the client ID and secret for an access token. The example clients do this for you; this step does it on its own so you can see what a token contains.</p>
+    <div id="cards-step3"></div>
+  </section>
+
+  <section id="step4">
+    <h2>4. Prompt the model</h2>
+    <p class="lead">Each example runs the real client from <code>examples/</code>. Every call goes through the API, so it gets the same checks, limits, cost estimate and logging as any other caller.</p>
+    <div class="concepts">
+      <h3>What happens on every call</h3>
+      <dl>
+        <dt>1. Token</dt><dd>The client gets an access token from Cognito with the client ID and secret, and reuses it for 60 minutes.</dd>
+        <dt>2. API Gateway</dt><dd>Checks the token and its scope (else <code>401</code>), the API key (else <code>403</code>), and the rate limit and daily quota (else <code>429</code>). Nothing has been paid for yet.</dd>
+        <dt>3. Lambda</dt><dd>The function checks the request body (else <code>400</code>), turns the alias into the approved model, caps <code>max_tokens</code>, and calls Amazon Bedrock with the Converse API.</dd>
+        <dt>4. Bedrock</dt><dd>Runs the model through a tagged application inference profile, so its cost can be traced to this stack.</dd>
+        <dt>5. Response</dt><dd>The answer comes back with the tokens used and a cost estimate. The function logs one line of metadata: never the question or the answer.</dd>
+      </dl>
+    </div>
+    <div id="cards-step4"></div>
+  </section>
+
+  <section id="step5">
+    <h2>5. What the API refuses</h2>
+    <p class="lead">A secure API is defined as much by what it refuses as by what it answers. Each example sends a deliberately wrong request and shows the raw HTTP status and error. None of them reaches the model, so none of them costs anything.</p>
+    <div id="cards-step5"></div>
+  </section>
+
+  <section id="step6">
+    <h2>6. Clean up</h2>
+    <p class="lead">When you're done, forget what the page holds, then stop the server with Ctrl+C in the terminal where it runs. Stopping it forgets everything anyway.</p>
+    <div id="cards-step6"></div>
+  </section>
+</main>
+
+<script nonce="__NONCE__">
+"use strict";
+const TOKEN = "__TUTORIAL_TOKEN__";
+let STATE = null;
+let SHELL = "ps";
+try { SHELL = localStorage.getItem("genai-tutorial-shell") || "ps"; } catch (e) {}
+
+const VARS = [
+  ["GENAI_API_URL", "The web address of the API, where questions are sent", "Without it the caller doesn't know where to send requests", "api_url"],
+  ["GENAI_TOKEN_URL", "The web address of the Cognito \"sign-in desk\" for programs", "The caller gets its access token here first", "token_url"],
+  ["GENAI_SCOPE", "The permission name the token must carry: \"may call this API\"", "API Gateway refuses tokens without it (401)", "oauth_scope"],
+  ["GENAI_CLIENT_ID", "The program's username: which registered application is asking", "Cognito needs to know which application is signing in", "client_ids"],
+  ["GENAI_CLIENT_SECRET", "The program's password, paired with the client ID", "Proves the caller is that application. Secret", "client_secrets"],
+  ["GENAI_API_KEY", "A key that picks the caller's usage plan (rate limit and daily quota)", "API Gateway refuses requests without it (403). Secret", "api_keys"],
+];
+
+const ENV_PS = "$env:GENAI_API_URL = terraform -chdir=terraform output -raw api_url; $env:GENAI_TOKEN_URL = terraform -chdir=terraform output -raw token_url; $env:GENAI_SCOPE = terraform -chdir=terraform output -raw oauth_scope; $env:GENAI_CLIENT_ID = (terraform -chdir=terraform output -json client_ids | ConvertFrom-Json).demo; $env:GENAI_CLIENT_SECRET = (terraform -chdir=terraform output -json client_secrets | ConvertFrom-Json).demo; $env:GENAI_API_KEY = (terraform -chdir=terraform output -json api_keys | ConvertFrom-Json).demo; \"$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)\"; $env:GENAI_API_URL";
+const ENV_BASH = "export GENAI_API_URL=$(terraform -chdir=terraform output -raw api_url) GENAI_TOKEN_URL=$(terraform -chdir=terraform output -raw token_url) GENAI_SCOPE=$(terraform -chdir=terraform output -raw oauth_scope); export GENAI_CLIENT_ID=$(terraform -chdir=terraform output -json client_ids | python -c \"import sys,json;print(json.load(sys.stdin)['demo'])\") GENAI_CLIENT_SECRET=$(terraform -chdir=terraform output -json client_secrets | python -c \"import sys,json;print(json.load(sys.stdin)['demo'])\") GENAI_API_KEY=$(terraform -chdir=terraform output -json api_keys | python -c \"import sys,json;print(json.load(sys.stdin)['demo'])\"); echo ${#GENAI_CLIENT_SECRET} ${#GENAI_API_KEY}; echo $GENAI_API_URL";
+const TOKEN_PS = "$token = (Invoke-RestMethod -Method Post -Uri $env:GENAI_TOKEN_URL -Body @{grant_type='client_credentials'; scope=$env:GENAI_SCOPE; client_id=$env:GENAI_CLIENT_ID; client_secret=$env:GENAI_CLIENT_SECRET}).access_token; $token.Length";
+const TOKEN_BASH = "TOKEN=$(curl -s -d \"grant_type=client_credentials&scope=$GENAI_SCOPE&client_id=$GENAI_CLIENT_ID&client_secret=$GENAI_CLIENT_SECRET\" \"$GENAI_TOKEN_URL\" | python -c \"import sys,json;print(json.load(sys.stdin)['access_token'])\"); echo ${#TOKEN}";
+const NEED_TOKEN = "Needs a token in this window first: run the token command from step 3 (it lasts 60 minutes).";
+
+function psCall(method, path, bodyPs, headers) {
+  const h = headers || "@{Authorization=\"Bearer $token\"; 'x-api-key'=$env:GENAI_API_KEY}";
+  const body = bodyPs ? `$body = ${bodyPs} | ConvertTo-Json -Depth 6; ` : "";
+  const bodyArg = bodyPs ? " -ContentType 'application/json' -Body $body" : "";
+  return `${body}try { Invoke-RestMethod -Method ${method} -Uri "$env:GENAI_API_URL${path}" -Headers ${h}${bodyArg} | ConvertTo-Json -Depth 6 } catch { "HTTP " + $_.Exception.Response.StatusCode.value__; $_.ErrorDetails.Message }`;
+}
+function curlCall(method, path, bodyJson, headers) {
+  const h = headers || "-H \"Authorization: Bearer $TOKEN\" -H \"x-api-key: $GENAI_API_KEY\"";
+  const body = bodyJson ? ` -H "content-type: application/json" -d '${bodyJson}'` : "";
+  return `curl -s -w '\\nHTTP %{http_code}\\n' -X ${method} ${h}${body} "$GENAI_API_URL${path}"`;
+}
+
+/* ---- card definitions ---------------------------------------------------- */
+
+function identityCard(key, profile, roleText, extra) {
+  return {
+    id: "id-" + key, title: `Who am I signed in as? (${profile})`,
+    what: `Asks AWS which identity the <code>${profile}</code> profile is using right now. ${roleText}`,
+    behind: [
+      `The server reads the profile's settings from <code>~/.aws/config</code>: the role to take on (<code>role_arn</code>), your MFA device (<code>mfa_serial</code>) and the profile with your access key (<code>source_profile</code>).`,
+      `If your terminal signed in to this role recently, the AWS CLI saved the temporary credentials in <code>~/.aws/cli/cache</code>. The server reuses them if more than 15 minutes are left, so no new MFA code is needed.`,
+      `Otherwise it asks you for an MFA code (below) and runs <code>aws sts assume-role</code> with it, which returns new credentials valid for one hour.`,
+      `It then runs <code>aws sts get-caller-identity</code> with those credentials. STS replies with the account, the role and the session: proof the sign-in works.`,
+    ],
+    expected: `JSON with <code>UserId</code>, <code>Account</code> (the 12-digit account number) and <code>Arn</code> ending in <code>assumed-role/${profile}/&lt;session&gt;</code>. The badge at the top turns green and shows when the sign-in expires.`,
+    errors: [
+      `<b>"No sign-in with more than 15 minutes left"</b>: type the 6-digit code from your authenticator app and choose <b>Sign in with MFA</b>.`,
+      `<b>MultiFactorAuthentication failed / invalid MFA one time pass code</b>: the code expired (they change every 30 seconds) or was mistyped. Wait for a new code. Each code works only once.`,
+      `<b>AccessDenied ... not authorized to perform: sts:AssumeRole</b>: the role's trust policy doesn't allow your user, or MFA is missing. See <code>bootstrap/iam/README.md</code>.`,
+      `<b>The config profile could not be found</b>: the profile isn't in <code>~/.aws/config</code>. See <code>docs/PREFLIGHT_CHECKS.md</code> section 2.`,
+    ],
+    wa: extra,
+    controls: [
+      { button: "Check sign-in", action: "identity.check", params: { profile: key } },
+      { input: "mfa-" + key, label: "MFA code (6 digits)", placeholder: "123456", size: 8, mfa: true },
+      { button: "Sign in with MFA", action: "identity.mfa", params: () => ({ profile: key, code: val("mfa-" + key) }), clearAfter: "mfa-" + key },
+      { button: "Forget", secondary: true, action: "identity.forget", params: { profile: key } },
+    ],
+    own: {
+      ps: `aws sts get-caller-identity --profile ${profile}`, bash: `aws sts get-caller-identity --profile ${profile}`,
+      note: "In a terminal, the AWS CLI asks for the MFA code itself when it needs one, then caches the sign-in for about an hour. A sign-in made in your terminal is reused by this page.",
+    },
+  };
+}
+
+const CARDS = {
+  step1: [
+    identityCard("deploy", "powerlab-deploy", "This is the role that deployed the stack, and the one step 2 needs to read the connection settings.",
+      "Well-Architected: deploys use a dedicated role with a permissions boundary, taken on with MFA for one hour at a time (SEC02-BP02, SEC03-BP02)."),
+    identityCard("review", "powerlab-review", "This role can read everything and change nothing. It isn't needed for the rest of this page.",
+      "Well-Architected: reviews and audits use a read-only role, so the review can never change what it examines (SEC03-BP02)."),
+  ],
+  step2: [
+    {
+      id: "env-tf", title: "Read all six from Terraform (option A)",
+      what: "Reads each value from the deployment's Terraform outputs and holds it for steps 3-5. This is what the one-line command in <code>docs/HOW_TO.md</code> 1.3 does in a terminal.",
+      behind: [
+        "Terraform keeps a record of everything it created (the <b>state</b>) in an S3 bucket. Reading it needs AWS credentials, which is why step 1 comes first.",
+        "<code>terraform output -raw api_url</code> prints one output as plain text. The three endpoint values are read this way.",
+        "<code>client_ids</code>, <code>client_secrets</code> and <code>api_keys</code> hold one value per client, so they're printed as JSON (<code>-json</code>) and the entry for the chosen client name (default <code>demo</code>) is picked out.",
+        "The client secret and API key are marked <b>sensitive</b> in Terraform, so a plain <code>terraform output</code> hides them; asking for them by name shows them. This page then hides them again and shows only their length.",
+      ],
+      expected: "Six lines like <code>GENAI_API_URL = https://...</code>, with the secret and key shown as <code>&lt;hidden: 51 characters&gt;</code> and <code>&lt;hidden: 40 characters&gt;</code>. The table above turns green. It takes 10-30 seconds: Terraform starts six times.",
+      errors: [
+        "<b>Not signed in as powerlab-deploy</b>: do step 1 for the deploy profile.",
+        "<b>Backend initialization required</b>: run <code>terraform -chdir=terraform init \"-backend-config=backend.hcl\"</code> once in this clone (DEPLOYMENT.md step 4).",
+        "<b>No outputs found</b>: the stack isn't deployed (DEPLOYMENT.md steps 6-7).",
+        "<b>No client called '...'</b>: the name isn't in <code>api_clients</code> in <code>terraform.tfvars</code>.",
+      ],
+      wa: "Well-Architected: callers get only a scoped client identity, never AWS credentials, and the secrets are read on demand instead of being written into files or code (SEC02-BP03).",
+      controls: [
+        { input: "client", label: "Client name", value: "demo", size: 10 },
+        { button: "Read all six", action: "env.terraform", params: () => ({ client: val("client") || "demo" }) },
+      ],
+      own: { ps: ENV_PS, bash: ENV_BASH, note: "Needs the deploy credentials loaded in that window first (DEPLOYMENT.md step 2). The variables last until the window is closed." },
+    },
+    {
+      id: "env-manual", title: "Or set them by hand (option B)",
+      what: "For a developer who was given the six values by the operator instead of having AWS access. No AWS sign-in is needed for this option, or for anything after it.",
+      behind: [
+        "The values are held in the server's memory, exactly as if they had come from Terraform.",
+        "The secret and API key fields are password fields, so they aren't shown on screen while you type.",
+      ],
+      expected: "The six names, with the secret and key shown only by length.",
+      errors: ["<b>... is empty or not a single line</b>: every field is required; paste each value without line breaks."],
+      wa: "Well-Architected: values like these should travel through a password manager or secret store, never email or chat (SEC02-BP03).",
+      controls: VARS.map(v => ({ input: "man-" + v[0], label: v[0], size: 22, password: v[0].includes("SECRET") || v[0].includes("KEY") }))
+        .concat([{ button: "Set these six", action: "env.manual", params: () => ({ values: Object.fromEntries(VARS.map(v => [v[0], val("man-" + v[0])])) }) }]),
+      own: {
+        ps: "$env:GENAI_API_URL = \"<api-url>\"; $env:GENAI_TOKEN_URL = \"<token-url>\"; $env:GENAI_SCOPE = \"<scope>\"; $env:GENAI_CLIENT_ID = \"<client-id>\"; $env:GENAI_CLIENT_SECRET = \"<client-secret>\"; $env:GENAI_API_KEY = \"<api-key>\"; \"$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)\"",
+        bash: "export GENAI_API_URL=\"<api-url>\" GENAI_TOKEN_URL=\"<token-url>\" GENAI_SCOPE=\"<scope>\" GENAI_CLIENT_ID=\"<client-id>\" GENAI_CLIENT_SECRET=\"<client-secret>\" GENAI_API_KEY=\"<api-key>\"; echo ${#GENAI_CLIENT_SECRET} ${#GENAI_API_KEY}",
+        note: "A command typed with secrets in it is saved in the terminal's history; clear it afterwards, or load the values from a secret store.",
+      },
+    },
+  ],
+  step3: [
+    {
+      id: "token", title: "Get a token and read its claims",
+      what: "Exchanges the client ID and secret for an access token (the OAuth 2.0 <b>client credentials</b> flow), then decodes the token to show what's inside. The token itself is not shown: it's a credential.",
+      behind: [
+        "A POST to <code>GENAI_TOKEN_URL</code> sends <code>grant_type=client_credentials</code>, the scope, the client ID and the secret.",
+        "Cognito checks the ID and secret and returns a token valid for 3600 seconds (60 minutes).",
+        "The token is a JWT: three base64 parts separated by dots. The middle part is readable JSON (the <b>claims</b>); the last part is a signature that API Gateway checks, so the claims can't be changed.",
+        "The claims say who issued it (<code>iss</code>), for which client (<code>client_id</code>), with which permission (<code>scope</code>) and until when (<code>exp</code>).",
+      ],
+      expected: "<code>token_type Bearer | expires_in 3600 seconds | length ~860 characters</code>, then the claims. <code>scope</code> equals <code>GENAI_SCOPE</code>; <code>exp</code> is one hour after <code>iat</code>.",
+      errors: [
+        "<b>Not set yet: ...</b>: do step 2 first.",
+        "<b>HTTP Error 400: Bad Request</b>: the client ID, secret or scope is wrong. Read them again in step 2.",
+      ],
+      wa: "Well-Architected: short-lived tokens limit what a leaked token can do; reusing one token for its whole life (instead of one per call) keeps latency and cost down (SEC02-BP02, PERF).",
+      controls: [{ button: "Get a token", action: "api.token", params: {} }],
+      own: { ps: TOKEN_PS, bash: TOKEN_BASH, note: "Both store the token in a variable and print only its length." },
+    },
+  ],
+  step4: [
+    {
+      id: "models", title: "4.1 List the models you can use",
+      what: "Calls <code>GET /v1/models</code>, which lists the <b>aliases</b> this deployment offers. Callers choose an alias, never a raw model ID; the operator decides which model each alias uses.",
+      behind: [
+        "The client gets a token, then sends <code>GET</code> with the <code>Authorization</code> and <code>x-api-key</code> headers.",
+        "API Gateway checks both and passes the request to the Lambda function.",
+        "The function returns the alias list from its configuration. No model is called, so this costs nothing beyond the request.",
+      ],
+      expected: "Three aliases: <code>balanced</code>, <code>best</code> and <code>fast</code>, each with the model behind it, and <code>fast</code> marked as the default.",
+      errors: ["<b>Not set yet: ...</b>: do step 2 first.", "<b>401 / 403</b>: see step 5 for what they mean."],
+      wa: "Well-Architected: model choice stays on the server, so a model can be swapped or restricted without changing any client (OPS, SEC).",
+      controls: [
+        { button: "List models (Python)", action: "api.models", params: { client: "python" } },
+        { button: "List models (Node.js)", secondary: true, action: "api.models", params: { client: "node" } },
+      ],
+      own: { ps: "python examples/genai_client.py --list-models", bash: "python examples/genai_client.py --list-models", note: "Needs the six variables set in that window (step 2)." },
+    },
+    {
+      id: "first", title: "4.2 Ask your first question",
+      what: "Sends one question to the <code>fast</code> alias with <code>POST /v1/chat</code> and prints the answer and a summary line.",
+      behind: [
+        "The Python client builds the body <code>{\"model\":\"fast\",\"messages\":[{\"role\":\"user\",\"content\":\"...\"}]}</code>.",
+        "API Gateway checks the token, the API key and the rate limit, then calls the Lambda function.",
+        "The function validates the body, resolves <code>fast</code> to its model, caps <code>max_tokens</code> and calls Bedrock (Converse API).",
+        "The answer comes back with <code>usage</code> (tokens) and <code>cost_estimate_usd</code>. The client prints the answer, then the summary.",
+      ],
+      expected: "The answer, then <code>[fast | 15 in / 60 out tokens | ~$0.0003 | stop: end_turn | request ...]</code>. <b>in / out</b>: tokens billed; <b>~$</b>: the estimate; <b>stop: end_turn</b>: the answer is complete; <b>request</b>: the ID to quote when reporting a problem.",
+      errors: ["<b>429 THROTTLED</b>: too many requests at once; the client retries by itself.", "<b>504 timeout</b>: the model took over 25 seconds; ask for a shorter answer or use <code>fast</code>."],
+      wa: "Well-Architected: every answer reports its own token usage and cost, so spend is visible per request, per alias and per client (COST01-BP04).",
+      controls: [{ button: "Ask", action: "api.ask", params: { model: "fast", prompt: "Explain AWS Lambda in two sentences." } }],
+      own: { ps: "python examples/genai_client.py --model fast \"Explain AWS Lambda in two sentences.\"", bash: "python examples/genai_client.py --model fast \"Explain AWS Lambda in two sentences.\"" },
+    },
+    {
+      id: "compare", title: "4.3 Compare the aliases",
+      what: "Asks the same question of <code>balanced</code> and <code>best</code>. Compare the answers, the token counts, the cost and the time (shown under each output).",
+      behind: [
+        "Only the <code>model</code> field changes. The client, the API and the code path are identical: the Converse API is the same for every model.",
+        "Larger models usually answer more thoroughly, take longer and cost more per token.",
+      ],
+      expected: "Two answers with different costs. <code>best</code> is typically the slowest and most expensive; <code>fast</code> (4.2) the cheapest.",
+      errors: ["<b>503 model_unavailable</b>: the operator hasn't enabled that model in this account; use another alias."],
+      wa: "Well-Architected: pick the smallest model that does the job; aliases make that a configuration choice (COST, PERF, SUS).",
+      controls: [
+        { button: "Ask balanced", action: "api.ask", params: { model: "balanced", prompt: "Explain AWS Lambda in two sentences." } },
+        { button: "Ask best", action: "api.ask", params: { model: "best", prompt: "Explain AWS Lambda in two sentences." } },
+      ],
+      own: { ps: "python examples/genai_client.py --model balanced \"Explain AWS Lambda in two sentences.\"", bash: "python examples/genai_client.py --model best \"Explain AWS Lambda in two sentences.\"" },
+    },
+    {
+      id: "system", title: "4.4 Instructions and a length limit",
+      what: "Adds a <b>system prompt</b> (instructions for the whole answer) and <code>max_tokens</code> (the longest answer allowed, which also caps its cost).",
+      behind: [
+        "<code>--system</code> becomes the <code>system</code> field: the model treats it as standing instructions, separate from the question.",
+        "<code>--max-tokens 100</code> becomes <code>max_tokens</code>. The function lowers any value above its cap (1024) to the cap.",
+      ],
+      expected: "A one-sentence answer and a small token count.",
+      errors: ["<b>unrecognized arguments</b> (in a terminal): two commands were pasted on one line, or the question isn't in quotes."],
+      wa: "Well-Architected: a server-side cap on max_tokens bounds the cost of any single request, whatever the client asks for (COST, REL).",
+      controls: [{ button: "Ask", action: "api.ask", params: { model: "fast", max_tokens: 100, system: "Answer in one sentence.", prompt: "What is a permissions boundary?" } }],
+      own: { ps: "python examples/genai_client.py --model fast --max-tokens 100 --system \"Answer in one sentence.\" \"What is a permissions boundary?\"", bash: "python examples/genai_client.py --model fast --max-tokens 100 --system \"Answer in one sentence.\" \"What is a permissions boundary?\"" },
+    },
+    {
+      id: "cutoff", title: "4.5 An answer that gets cut off",
+      what: "Sets <code>max_tokens</code> to 8 on a question that needs more, to show what a cut-off answer looks like.",
+      behind: ["The model stops after 8 tokens, mid-sentence, and Bedrock reports why it stopped."],
+      expected: "A few words, then <code>stop: max_tokens</code> in the summary. In your own code, check <code>stop_reason</code>: <code>max_tokens</code> means the answer is incomplete.",
+      errors: [],
+      controls: [{ button: "Ask", action: "api.ask", params: { model: "fast", max_tokens: 8, prompt: "List the six pillars of the AWS Well-Architected Framework." } }],
+      own: { ps: "python examples/genai_client.py --model fast --max-tokens 8 \"List the six pillars of the AWS Well-Architected Framework.\"", bash: "python examples/genai_client.py --model fast --max-tokens 8 \"List the six pillars of the AWS Well-Architected Framework.\"" },
+    },
+    {
+      id: "json", title: "4.6 The whole JSON response",
+      what: "Makes the same kind of call with plain HTTP and prints everything: the status, the headers sent and the full response body. This is what any language's HTTP client sees.",
+      behind: [
+        "A short Python script gets a token, sends <code>POST /v1/chat</code> and prints the raw result. The script is shown in the output.",
+        "Response fields: <code>output</code> (the answer), <code>stop_reason</code>, <code>usage</code>, <code>cost_estimate_usd</code>, <code>model</code> (alias and the inference profile behind it) and <code>request_id</code>.",
+      ],
+      expected: "<code>HTTP 200</code> and the JSON body. The same fields are documented in <code>docs/API_REFERENCE.md</code>.",
+      errors: [],
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "chat_json" } }],
+      own: {
+        ps: psCall("Post", "/v1/chat", "@{model='fast'; max_tokens=120; messages=@(@{role='user'; content='Explain Amazon Bedrock in one sentence.'})}"),
+        bash: curlCall("POST", "/v1/chat", "{\"model\":\"fast\",\"max_tokens\":120,\"messages\":[{\"role\":\"user\",\"content\":\"Explain Amazon Bedrock in one sentence.\"}]}"),
+        note: NEED_TOKEN,
+      },
+    },
+    {
+      id: "conversation", title: "4.7 A conversation",
+      what: "The API remembers nothing between calls. To continue a conversation, the client sends the whole history each time, oldest first, with roles alternating <code>user</code> / <code>assistant</code>.",
+      behind: [
+        "The body holds three messages: the user's statement, the assistant's earlier reply, and the new question.",
+        "The model reads all three and can answer about the earlier message.",
+        "Every message is counted as input tokens on every call, so long conversations cost more per turn.",
+      ],
+      expected: "An answer that names Lambda, showing the model used the history. <code>input_tokens</code> is higher than for a single question.",
+      errors: ["<b>400 invalid_request</b>: roles don't alternate, or the first or last message isn't <code>user</code> (see step 5)."],
+      wa: "Well-Architected: keeping the API stateless means any function instance can answer any call, and nothing about a conversation is stored server-side (REL, SEC).",
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "conversation" } }],
+      own: {
+        ps: psCall("Post", "/v1/chat", "@{model='fast'; system='Answer in two short sentences.'; max_tokens=150; messages=@(@{role='user'; content='My favourite AWS service is Lambda.'}, @{role='assistant'; content='Noted.'}, @{role='user'; content='Which service did I say was my favourite, and what does it do?'})}"),
+        bash: curlCall("POST", "/v1/chat", "{\"model\":\"fast\",\"system\":\"Answer in two short sentences.\",\"max_tokens\":150,\"messages\":[{\"role\":\"user\",\"content\":\"My favourite AWS service is Lambda.\"},{\"role\":\"assistant\",\"content\":\"Noted.\"},{\"role\":\"user\",\"content\":\"Which service did I say was my favourite, and what does it do?\"}]}"),
+        note: NEED_TOKEN,
+      },
+    },
+    {
+      id: "own", title: "4.8 Your own prompt",
+      what: "Build any request. The command is shown before it runs, so you can copy it into your own terminal.",
+      behind: [
+        "<b>Python</b> runs <code>examples/genai_client.py</code> with every option. <b>Node.js</b> runs <code>examples/genai_client.mjs</code>, whose command line takes the question and alias only.",
+        "Leave max_tokens empty to use the server's cap (1024). Leave the system prompt empty for none.",
+      ],
+      expected: "The answer and the summary line, as in 4.2.",
+      errors: ["<b>An alias is lower-case letters...</b>: use <code>fast</code>, <code>balanced</code> or <code>best</code> (4.1)."],
+      builder: true,
+      controls: [
+        { select: "b-client", label: "Client", options: [["python", "Python"], ["node", "Node.js"]] },
+        { select: "b-model", label: "Alias", options: [["fast", "fast"], ["balanced", "balanced"], ["best", "best"]] },
+        { input: "b-max", label: "max_tokens", placeholder: "1024", size: 7 },
+        { input: "b-system", label: "System prompt (optional)", placeholder: "Answer briefly.", grow: true },
+        { textarea: "b-prompt", label: "Your question", value: "What does Amazon API Gateway do?" },
+        { button: "Run", action: "api.ask", params: () => ({ client: val("b-client"), model: val("b-model"), max_tokens: val("b-max"), system: val("b-system"), prompt: val("b-prompt") }) },
+      ],
+      own: { dynamic: true },
+    },
+  ],
+  step5: [
+    {
+      id: "e401", title: "5.1 No token: 401 Unauthorized",
+      what: "Calls <code>GET /v1/models</code> with the API key but without the <code>Authorization</code> header.",
+      behind: ["API Gateway's Cognito authorizer finds no token and refuses the request itself. The Lambda function never runs."],
+      expected: "<code>HTTP 401</code> with <code>{\"error\":{\"type\":\"UNAUTHORIZED\",...}}</code>. The same happens with an expired token (after 60 minutes) or one without the API's scope.",
+      errors: [],
+      wa: "Well-Architected: authentication happens at the front door, before any code runs or any cost is incurred (SEC03-BP02).",
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "no_token" } }],
+      own: { ps: psCall("Get", "/v1/models", null, "@{'x-api-key'=$env:GENAI_API_KEY}"), bash: curlCall("GET", "/v1/models", null, "-H \"x-api-key: $GENAI_API_KEY\"") },
+    },
+    {
+      id: "e403", title: "5.2 No API key: 403 Forbidden",
+      what: "Calls <code>GET /v1/models</code> with a valid token but without the <code>x-api-key</code> header.",
+      behind: ["The token proves who is calling, but every method also requires an API key to pick the caller's usage plan (rate limit and quota). Without one, API Gateway refuses."],
+      expected: "<code>HTTP 403</code> with <code>{\"error\":{\"type\":\"INVALID_API_KEY\",...}}</code>.",
+      errors: [],
+      wa: "Well-Architected: per-client usage plans mean one runaway client can't use up everyone's capacity or budget (REL, COST).",
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "no_api_key" } }],
+      own: { ps: psCall("Get", "/v1/models", null, "@{Authorization=\"Bearer $token\"}"), bash: curlCall("GET", "/v1/models", null, "-H \"Authorization: Bearer $TOKEN\""), note: NEED_TOKEN },
+    },
+    {
+      id: "e400a", title: "5.3 Unknown alias: 400 Bad Request",
+      what: "Asks for a model alias that doesn't exist (<code>turbo</code>).",
+      behind: ["The request passes API Gateway. The Lambda function checks the body against its allowlist of aliases and refuses before calling any model."],
+      expected: "<code>HTTP 400</code> with <code>invalid_request</code> and a message listing the allowed aliases.",
+      errors: [],
+      wa: "Well-Architected: an allowlist means only approved models can ever be called, whatever a client sends (SEC, COST).",
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "bad_alias" } }],
+      own: {
+        ps: psCall("Post", "/v1/chat", "@{model='turbo'; messages=@(@{role='user'; content='Hello'})}"),
+        bash: curlCall("POST", "/v1/chat", "{\"model\":\"turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}]}"), note: NEED_TOKEN,
+      },
+    },
+    {
+      id: "e400b", title: "5.4 Wrong message order: 400 Bad Request",
+      what: "Sends a conversation that starts with an <code>assistant</code> message.",
+      behind: ["The function requires the first and last messages to be <code>user</code> and the roles to alternate, and says which rule failed."],
+      expected: "<code>HTTP 400</code> with <code>invalid_request</code> and a message explaining the rule.",
+      errors: [],
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "bad_roles" } }],
+      own: {
+        ps: psCall("Post", "/v1/chat", "@{model='fast'; messages=@(@{role='assistant'; content='Hello'})}"),
+        bash: curlCall("POST", "/v1/chat", "{\"model\":\"fast\",\"messages\":[{\"role\":\"assistant\",\"content\":\"Hello\"}]}"), note: NEED_TOKEN,
+      },
+    },
+    {
+      id: "e404", title: "5.5 Unknown path: 404 Not Found",
+      what: "Calls a path the API doesn't have.",
+      behind: ["API Gateway has no route for it and returns a plain 404 in the API's usual error format."],
+      expected: "<code>HTTP 404</code> with <code>{\"error\":{\"type\":\"not_found\",...}}</code>.",
+      errors: [],
+      controls: [{ button: "Send", action: "api.raw", params: { preset: "unknown_route" } }],
+      own: { ps: psCall("Get", "/v1/nothing-here"), bash: curlCall("GET", "/v1/nothing-here"), note: NEED_TOKEN },
+    },
+  ],
+  step6: [
+    {
+      id: "cleanup", title: "Forget everything this page holds",
+      what: "Drops the AWS credentials and the six settings from the server's memory.",
+      behind: [
+        "Your terminal's own AWS sign-in (the CLI cache) is not touched; it expires by itself within the hour.",
+        "Stopping the server with Ctrl+C has the same effect.",
+        "The deployed stack keeps running and costs a few cents a month while idle. To remove it, see <code>docs/DEPLOYMENT.md</code> step 17.",
+      ],
+      expected: "The badges at the top turn red.",
+      errors: [],
+      controls: [
+        { button: "Forget deploy sign-in", secondary: true, action: "identity.forget", params: { profile: "deploy" } },
+        { button: "Forget review sign-in", secondary: true, action: "identity.forget", params: { profile: "review" } },
+        { button: "Clear the six settings", secondary: true, action: "env.clear", params: {} },
+      ],
+      own: {
+        ps: "Remove-Item Env:GENAI_*; Remove-Item Env:AWS_ACCESS_KEY_ID, Env:AWS_SECRET_ACCESS_KEY, Env:AWS_SESSION_TOKEN -ErrorAction SilentlyContinue",
+        bash: "unset GENAI_API_URL GENAI_TOKEN_URL GENAI_SCOPE GENAI_CLIENT_ID GENAI_CLIENT_SECRET GENAI_API_KEY TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN",
+        note: "Or simply close the terminal window.",
+      },
+    },
+  ],
+};
+
+/* ---- rendering ----------------------------------------------------------- */
+
+function el(tag, attrs, html) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v);
+  }
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+}
+function val(id) { const e = document.getElementById(id); return e ? e.value.trim() : ""; }
+
+function ownBlock(card) {
+  const d = el("details", { class: "own" });
+  d.appendChild(el("summary", {}, "Run it in your own terminal"));
+  const body = el("div");
+  d.appendChild(body);
+  const draw = () => {
+    body.innerHTML = "";
+    let cmd = card.own.dynamic ? builderCommand() : (SHELL === "ps" ? card.own.ps : card.own.bash);
+    const pre = el("pre");
+    pre.textContent = cmd;
+    const copy = el("button", { class: "copy secondary", type: "button" }, "Copy");
+    copy.addEventListener("click", () => { navigator.clipboard.writeText(cmd).then(() => { copy.textContent = "Copied"; setTimeout(() => copy.textContent = "Copy", 1200); }); });
+    pre.appendChild(copy);
+    body.appendChild(pre);
+    const note = card.own.dynamic ? "Needs the six variables set in that window (step 2). One line: paste and press Enter." : card.own.note;
+    if (note) body.appendChild(el("p", {}, note));
+  };
+  d._draw = draw;
+  draw();
+  return d;
+}
+
+function builderCommand() {
+  const q = s => /^[\w.\/-]+$/.test(s) ? s : "\"" + s.replace(/"/g, "\\\"") + "\"";
+  const prompt = val("b-prompt") || "<your question>";
+  if (val("b-client") === "node") return `node examples/genai_client.mjs ${q(prompt)} ${val("b-model")}`;
+  let c = `python examples/genai_client.py --model ${val("b-model")}`;
+  if (val("b-max")) c += ` --max-tokens ${val("b-max")}`;
+  if (val("b-system")) c += ` --system ${q(val("b-system"))}`;
+  return c + " " + q(prompt);
+}
+
+const OWN_BLOCKS = [];
+
+function renderCard(card) {
+  const c = el("article", { class: "card", id: "card-" + card.id });
+  const head = el("div", { class: "head" });
+  head.appendChild(el("h3", {}, card.title));
+  head.appendChild(el("p", { class: "what" }, card.what));
+  c.appendChild(head);
+  const ex = el("div", { class: "explain" });
+  const left = el("div"), right = el("div");
+  left.appendChild(el("h4", {}, "What happens, step by step"));
+  const ol = el("ol");
+  card.behind.forEach(b => ol.appendChild(el("li", {}, b)));
+  left.appendChild(ol);
+  right.appendChild(el("h4", {}, "Expected result"));
+  right.appendChild(el("p", {}, card.expected));
+  if (card.errors && card.errors.length) {
+    right.appendChild(el("h4", {}, "If it goes wrong"));
+    const ul = el("ul");
+    card.errors.forEach(e => ul.appendChild(el("li", {}, e)));
+    right.appendChild(ul);
+  }
+  ex.appendChild(left); ex.appendChild(right);
+  c.appendChild(ex);
+  if (card.wa) c.appendChild(el("div", { class: "wa" }, card.wa));
+
+  const ctr = el("div", { class: "controls" });
+  const term = el("pre", { class: "term", "aria-live": "polite" });
+  for (const k of card.controls) {
+    if (k.button) {
+      const b = el("button", { type: "button", class: k.secondary ? "secondary" : "" }, k.button);
+      b.addEventListener("click", () => runAction(k, term, b));
+      ctr.appendChild(b);
+    } else {
+      const lab = el("label", { class: k.grow || k.textarea ? "grow" : "" });
+      lab.appendChild(document.createTextNode(k.label));
+      let input;
+      if (k.select) {
+        input = el("select", { id: k.select });
+        k.options.forEach(([v, t]) => { const o = el("option", { value: v }); o.textContent = t; input.appendChild(o); });
+      } else if (k.textarea) {
+        input = el("textarea", { id: k.textarea });
+        input.value = k.value || "";
+      } else {
+        input = el("input", { id: k.input, type: k.password ? "password" : "text", size: k.size || 20, placeholder: k.placeholder || "", autocomplete: "off", spellcheck: "false", inputmode: k.mfa ? "numeric" : null, maxlength: k.mfa ? 6 : null });
+        if (k.value) input.value = k.value;
+      }
+      lab.appendChild(input);
+      ctr.appendChild(lab);
+      if (card.builder) input.addEventListener("input", () => OWN_BLOCKS.forEach(o => o._draw()));
+    }
+  }
+  c.appendChild(ctr);
+  c.appendChild(term);
+  const own = ownBlock(card);
+  OWN_BLOCKS.push(own);
+  c.appendChild(own);
+  return c;
+}
+
+function writeTerm(term, out) {
+  term.innerHTML = "";
+  term.classList.add("show");
+  const add = (text, cls) => { const s = el("span", { class: cls || "" }); s.textContent = text; term.appendChild(s); };
+  if (out.command) add(out.command.split("\n").map((l, i) => (i === 0 ? "$ " : "  ") + l).join("\n") + "\n", "cmd");
+  if (out.stdout) add(out.stdout.replace(/\s+$/, "") + "\n");
+  if (out.stderr) add(out.stderr.replace(/\s+$/, "") + "\n", "err");
+  const bits = [];
+  if (out.exit_code !== null && out.exit_code !== undefined) bits.push(out.exit_code === 0 ? "exit code 0 (success)" : `exit code ${out.exit_code} (failed)`);
+  if (out.ms) bits.push((out.ms / 1000).toFixed(1) + " s");
+  if (bits.length) add("\n[" + bits.join(" | ") + "]\n", "dim");
+  if (out.note) add((out.refused ? "Not run: " : "") + out.note + "\n", out.refused || out.needs_mfa ? "err" : "dim");
+}
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Tutorial-Token": TOKEN }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: "Unreadable reply from the server." }));
+  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+async function runAction(k, term, button) {
+  const params = typeof k.params === "function" ? k.params() : k.params;
+  const buttons = document.querySelectorAll("button:not(.copy)");
+  buttons.forEach(b => b.disabled = true);
+  term.classList.add("show");
+  term.innerHTML = "";
+  const s = el("span", { class: "dim" }); s.textContent = "Running..."; term.appendChild(s);
+  try {
+    const out = await post("/api/run", { action: k.action, params });
+    writeTerm(term, out);
+    if (out.state) applyState(out.state);
+    if (out.needs_mfa) { const f = document.getElementById("mfa-" + params.profile); if (f) f.focus(); }
+  } catch (e) {
+    writeTerm(term, { note: e.message + " Is the tutorial server still running? Start it again and reload this page.", refused: true });
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+    if (k.clearAfter) { const f = document.getElementById(k.clearAfter); if (f) f.value = ""; }
+  }
+}
+
+function minutesLeft(iso) { return Math.max(0, Math.round((new Date(iso) - new Date()) / 60000)); }
+
+function applyState(st) {
+  STATE = st;
+  for (const key of ["deploy", "review"]) {
+    const p = st.profiles[key], pill = document.getElementById("pill-" + key);
+    pill.className = "pill" + (p.signed_in ? " on" : "");
+    pill.textContent = p.signed_in ? `${key}: signed in, ${minutesLeft(p.expires)} min left` : `${key}: not signed in`;
+    pill.title = p.signed_in ? `${p.arn} (${p.source})` : "";
+  }
+  const n = Object.values(st.env).filter(v => v.set).length;
+  const pe = document.getElementById("pill-env");
+  pe.className = "pill" + (n === 6 ? " on" : n ? " part" : "");
+  pe.textContent = `settings: ${n} / 6`;
+  const tb = document.querySelector("#vars tbody");
+  tb.innerHTML = "";
+  for (const [name, what, why, src] of VARS) {
+    const v = st.env[name];
+    const tr = el("tr");
+    tr.appendChild(el("td", {}, `<code>${name}</code>`));
+    tr.appendChild(el("td", {}, what));
+    tr.appendChild(el("td", {}, why));
+    tr.appendChild(el("td", {}, `Terraform output <code>${src}</code>`));
+    const td = el("td", { class: v.set ? "status-yes" : "status-no" });
+    td.textContent = v.set ? "set: " + v.shown : "not set";
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  }
+  const missing = Object.entries(st.tools).filter(([, ok]) => !ok).map(([t]) => t);
+  const warn = document.getElementById("tools-warning");
+  if (missing.length && !warn) {
+    const w = el("div", { class: "notice", id: "tools-warning" }, "Not found on this machine's PATH: <b>" + missing.join(", ") + "</b>. Steps that need them will say so.");
+    document.getElementById("intro").appendChild(w);
+  }
+}
+
+function setShell(s) {
+  SHELL = s;
+  try { localStorage.setItem("genai-tutorial-shell", s); } catch (e) {}
+  OWN_BLOCKS.forEach(o => o._draw());
+}
+
+for (const [step, cards] of Object.entries(CARDS)) {
+  const host = document.getElementById("cards-" + step);
+  cards.forEach(card => host.appendChild(renderCard(card)));
+}
+document.querySelectorAll("input[name=shell]").forEach(r => {
+  r.checked = r.value === SHELL;
+  r.addEventListener("change", () => setShell(r.value));
+});
+setShell(SHELL);
+post("/api/state", {}).then(applyState).catch(() => {});
+setInterval(() => { if (STATE) applyState(STATE); }, 30000);
+</script>
+</body>
+</html>
