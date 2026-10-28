@@ -17,27 +17,126 @@ How to use the deployed API from your own terminal (Bash, Git Bash or PowerShell
 
 ## 1. Get the connection settings
 
-A caller needs six values. None of them is an AWS credential: with these six, a caller on any machine can use the API, and nothing else in AWS.
+### 1.1 How a call works
 
-| Variable | Terraform output | What it is | Sensitive |
-|---|---|---|---|
-| `GENAI_API_URL` | `api_url` | The API base URL | No |
-| `GENAI_TOKEN_URL` | `token_url` | The Cognito token endpoint | No |
-| `GENAI_SCOPE` | `oauth_scope` | The OAuth scope the token must carry | No |
-| `GENAI_CLIENT_ID` | `client_ids` (one per client name) | The client's identity | No |
-| `GENAI_CLIENT_SECRET` | `client_secrets` | The client's password | **Yes** |
-| `GENAI_API_KEY` | `api_keys` | Selects the client's usage plan (throttle and daily quota) | **Yes** |
+Calling the model is always two HTTP requests:
 
-The commands below read them from Terraform and set them as environment variables in the current terminal window. Every example in this guide uses these variable names, so nothing has to be pasted.
+1. **Get a token.** The caller sends its client ID and client secret (like a username and password for a program) to the **token URL**, asking for the **scope** "may call this API". **Amazon Cognito**, the AWS service that manages identities for this API, checks them and returns an **access token**: a signed string that proves who the caller is. It is valid for 60 minutes and is reused for every call in that time.
+2. **Call the API.** The caller sends its question to the **API URL**, with the access token and its **API key** in two headers. **Amazon API Gateway**, the AWS service that receives every request, checks the token, checks the API key, applies the caller's rate limit, and only then passes the request on to the code that calls the model.
+
+The six values below are everything those two requests need. None of them is an AWS credential: a caller with these six can use this API from any machine, and can't do anything else in AWS.
+
+### 1.2 The six environment variables
+
+An **environment variable** is a named value that a terminal window (or a running program) keeps in memory, so commands and code can read it without the value being typed or written into the code. Every example in this guide reads these six names, so nothing has to be pasted into commands.
+
+| Variable | What it is, in plain words | Looks like | Why the caller needs it | Used in | Where it comes from | Secret? |
+|---|---|---|---|---|---|---|
+| `GENAI_API_URL` | The web address of the API: where questions are sent | `https://<api-id>.execute-api.<region>.amazonaws.com/<stage>` | Without it the caller doesn't know where to send the question. `/v1/chat` and `/v1/models` are added to the end | Request 2 | Terraform output `api_url` | No |
+| `GENAI_TOKEN_URL` | The web address of the Cognito "sign-in desk" for programs | `https://<prefix>.auth.<region>.amazoncognito.com/oauth2/token` | The caller must get an access token here before it can call the API | Request 1 | Terraform output `token_url` | No |
+| `GENAI_SCOPE` | The name of the permission the token must carry, "may call this API" | `<api-name>/invoke` | API Gateway refuses tokens without this scope (`401`), so a token issued for some other purpose can't be used here | Request 1 | Terraform output `oauth_scope` | No |
+| `GENAI_CLIENT_ID` | The caller's username: which registered application is asking | 26 letters and digits | Cognito needs to know which application is signing in. Each application gets its own ([section 6](#6-give-each-application-its-own-client)) | Request 1 | Terraform output `client_ids`, one per client name | No, but don't publish it |
+| `GENAI_CLIENT_SECRET` | The caller's password, paired with the client ID | About 50 characters | Proves the caller really is that application. Anyone holding it can get tokens and spend that client's quota | Request 1 | Terraform output `client_secrets` | **Yes** |
+| `GENAI_API_KEY` | A key that picks the caller's **usage plan**: its rate limit and daily request quota | 40 letters and digits | API Gateway refuses requests without it (`403`). It isn't proof of identity on its own (that's the token's job); it decides which limits apply | Request 2, header `x-api-key` | Terraform output `api_keys` | **Yes** |
+
+**Keeping the secrets safe:** never put `GENAI_CLIENT_SECRET` or `GENAI_API_KEY` in code, commits, screenshots, tickets or chat. Set them as environment variables, or load them from a secret store such as AWS Systems Manager Parameter Store ([section 3.4](#34-inside-an-aws-lambda-function-or-any-aws-compute)). If one leaks, the operator removes that client and creates a new one (**Security**, SEC02-BP03).
+
+**Terms used above**
+
+| Term | Meaning |
+|---|---|
+| **Amazon Cognito** | The AWS service that keeps the list of applications allowed to use the API and issues their tokens |
+| **OAuth 2.0 client credentials** | The standard way for a program (not a person) to sign in: send ID and secret, get a token back |
+| **Access token** | A signed, time-limited string that proves who the caller is. Sent as `Authorization: Bearer <token>` |
+| **Scope** | A named permission inside a token; this API accepts only tokens with its own scope |
+| **Amazon API Gateway** | The AWS service at the API URL. It checks every request and applies the limits before any model is called, so refused requests cost nothing |
+| **Usage plan** | The rate limit (requests per second) and daily quota attached to an API key |
+| **Terraform output** | A value the deployment publishes after it creates the resources, read with `terraform output` |
+
+### 1.3 Set the variables
+
+There are two ways to set them, depending on who you are:
+
+| You are | Use | AWS credentials needed? |
+|---|---|---|
+| The operator who deployed the stack, or someone with the deploy role | **Option A**: read all six from Terraform with one command | Yes, the deploy role, only for this command |
+| A developer who was given the six values by the operator | **Option B**: set each one by hand | No |
+
+#### Option A: read them from Terraform
+
+**Before you run:** you're in the repository root, `terraform init` has been done in this clone ([DEPLOYMENT.md step 4](DEPLOYMENT.md#4-initialise-terraform)), and the deploy credentials are loaded in this terminal window, because the values are read from the Terraform state in S3. To load them, run both lines (the first asks for your MFA code):
+
+```
+aws sts get-caller-identity --profile powerlab-deploy
+```
+```
+aws configure export-credentials --profile powerlab-deploy --format powershell | Invoke-Expression
+```
+
+In Bash / Git Bash, the second line is `eval "$(aws configure export-credentials --profile powerlab-deploy --format env)"`. Details: [DEPLOYMENT.md step 2](DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell).
+
+**Command (PowerShell)**, one line:
+
+```
+$env:GENAI_API_URL = terraform -chdir=terraform output -raw api_url; $env:GENAI_TOKEN_URL = terraform -chdir=terraform output -raw token_url; $env:GENAI_SCOPE = terraform -chdir=terraform output -raw oauth_scope; $env:GENAI_CLIENT_ID = (terraform -chdir=terraform output -json client_ids | ConvertFrom-Json).demo; $env:GENAI_CLIENT_SECRET = (terraform -chdir=terraform output -json client_secrets | ConvertFrom-Json).demo; $env:GENAI_API_KEY = (terraform -chdir=terraform output -json api_keys | ConvertFrom-Json).demo; "$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)"; $env:GENAI_API_URL
+```
+
+**Command (Bash / Git Bash)**, one line (also needs Python 3.10 or later, to read JSON):
+
+```
+export GENAI_API_URL=$(terraform -chdir=terraform output -raw api_url) GENAI_TOKEN_URL=$(terraform -chdir=terraform output -raw token_url) GENAI_SCOPE=$(terraform -chdir=terraform output -raw oauth_scope); export GENAI_CLIENT_ID=$(terraform -chdir=terraform output -json client_ids | python -c "import sys,json;print(json.load(sys.stdin)['demo'])") GENAI_CLIENT_SECRET=$(terraform -chdir=terraform output -json client_secrets | python -c "import sys,json;print(json.load(sys.stdin)['demo'])") GENAI_API_KEY=$(terraform -chdir=terraform output -json api_keys | python -c "import sys,json;print(json.load(sys.stdin)['demo'])"); echo ${#GENAI_CLIENT_SECRET} ${#GENAI_API_KEY}; echo $GENAI_API_URL
+```
 
 | | |
 |---|---|
-| **Before you run** | Deploy credentials loaded in this terminal ([DEPLOYMENT.md step 2](DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell)), because the values are read from the Terraform state in S3. `terraform init` done in this clone ([step 4](DEPLOYMENT.md#4-initialise-terraform)). Bash also needs Python 3.10 or later (to read JSON) |
-| **Commands (Bash / Git Bash)** | `export GENAI_API_URL=$(terraform -chdir=terraform output -raw api_url) GENAI_TOKEN_URL=$(terraform -chdir=terraform output -raw token_url) GENAI_SCOPE=$(terraform -chdir=terraform output -raw oauth_scope)` then `export GENAI_CLIENT_ID=$(terraform -chdir=terraform output -json client_ids \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])") GENAI_CLIENT_SECRET=$(terraform -chdir=terraform output -json client_secrets \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])") GENAI_API_KEY=$(terraform -chdir=terraform output -json api_keys \| python -c "import sys,json;print(json.load(sys.stdin)['demo'])")` then `echo ${#GENAI_CLIENT_SECRET} ${#GENAI_API_KEY}` |
-| **Commands (PowerShell)** | `$env:GENAI_API_URL = terraform -chdir=terraform output -raw api_url; $env:GENAI_TOKEN_URL = terraform -chdir=terraform output -raw token_url; $env:GENAI_SCOPE = terraform -chdir=terraform output -raw oauth_scope` then `$env:GENAI_CLIENT_ID = (terraform -chdir=terraform output -json client_ids \| ConvertFrom-Json).demo; $env:GENAI_CLIENT_SECRET = (terraform -chdir=terraform output -json client_secrets \| ConvertFrom-Json).demo; $env:GENAI_API_KEY = (terraform -chdir=terraform output -json api_keys \| ConvertFrom-Json).demo` then `"$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)"` |
-| **Purpose** | Sets the six variables for the `demo` client in this window only. Replace `demo` with another client name to act as that client ([section 6](#6-give-each-application-its-own-client)) |
-| **Expected** | Two numbers, about `51 40`: the lengths of the secret and the API key (the values themselves aren't printed) |
-| **Lasts** | Until the window is closed. The deploy credentials can expire afterwards: the API calls below don't need them |
+| **Purpose** | Sets the six variables for the `demo` client in this window only. Replace each `demo` with another client name to act as that client ([section 6](#6-give-each-application-its-own-client)) |
+| **Expected** | After a few seconds, two numbers, about `51 40` (the lengths of the secret and the API key; the values themselves aren't printed), then the API URL ending in `.amazonaws.com/<stage>` |
+| **Lasts** | Until the window is closed; a new window needs the command again. The deploy credentials can expire afterwards: the API calls below don't need them |
+
+**What each part of the PowerShell command does:**
+
+| Part | Sets | How |
+|---|---|---|
+| `$env:GENAI_API_URL = terraform -chdir=terraform output -raw api_url` | `GENAI_API_URL` | `terraform output -raw` prints one output as plain text; `-chdir=terraform` runs it in the `terraform` folder; `$env:NAME = ...` stores the result as an environment variable |
+| `$env:GENAI_TOKEN_URL = terraform -chdir=terraform output -raw token_url` | `GENAI_TOKEN_URL` | The same, for the token URL |
+| `$env:GENAI_SCOPE = terraform -chdir=terraform output -raw oauth_scope` | `GENAI_SCOPE` | The same, for the scope |
+| `$env:GENAI_CLIENT_ID = (terraform -chdir=terraform output -json client_ids \| ConvertFrom-Json).demo` | `GENAI_CLIENT_ID` | `client_ids` holds one ID per client, so it is printed as JSON (`-json`), converted to an object (`ConvertFrom-Json`), and the `demo` entry is picked (`.demo`) |
+| `$env:GENAI_CLIENT_SECRET = (terraform -chdir=terraform output -json client_secrets \| ConvertFrom-Json).demo` | `GENAI_CLIENT_SECRET` | The same, for the secret. Terraform marks this output sensitive, so `terraform output` on its own hides it; asking for it by name shows it |
+| `$env:GENAI_API_KEY = (terraform -chdir=terraform output -json api_keys \| ConvertFrom-Json).demo` | `GENAI_API_KEY` | The same, for the API key (also sensitive) |
+| `"$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)"; $env:GENAI_API_URL` | (check only) | Prints the lengths of the two secrets, not the secrets, and the API URL, to show everything was set |
+
+The Bash command does the same: `export NAME=$(...)` stores a command's output, and `python -c "..."` picks the `demo` entry out of the JSON.
+
+#### Option B: set them by hand
+
+**Before you run:** the operator has given you the six values through a safe channel (a password manager or secret store, not email or chat). No AWS credentials, Terraform or clone of this repository are needed. Replace each `<...>` with the value you were given, keeping the quotes.
+
+**Command (PowerShell)**, one line:
+
+```
+$env:GENAI_API_URL = "<api-url>"; $env:GENAI_TOKEN_URL = "<token-url>"; $env:GENAI_SCOPE = "<scope>"; $env:GENAI_CLIENT_ID = "<client-id>"; $env:GENAI_CLIENT_SECRET = "<client-secret>"; $env:GENAI_API_KEY = "<api-key>"; "$($env:GENAI_CLIENT_SECRET.Length) $($env:GENAI_API_KEY.Length)"
+```
+
+**Command (Bash / Git Bash)**, one line:
+
+```
+export GENAI_API_URL="<api-url>" GENAI_TOKEN_URL="<token-url>" GENAI_SCOPE="<scope>" GENAI_CLIENT_ID="<client-id>" GENAI_CLIENT_SECRET="<client-secret>" GENAI_API_KEY="<api-key>"; echo ${#GENAI_CLIENT_SECRET} ${#GENAI_API_KEY}
+```
+
+| | |
+|---|---|
+| **Purpose** | Sets the six variables in this window only |
+| **Expected** | Two numbers, about `51 40`. Anything much shorter means a value was pasted incompletely |
+| **Note** | A command typed with secrets in it is saved in the terminal's history. Clear it afterwards (PowerShell: `Clear-History`, and delete `(Get-PSReadLineOption).HistorySavePath` lines if needed; Bash: `history -c`), or load the values from a secret store instead |
+
+#### Check the variables at any time
+
+| | |
+|---|---|
+| **Command (PowerShell)** | `Get-ChildItem env:GENAI_* \| Select-Object Name, @{n='Length';e={$_.Value.Length}}` |
+| **Command (Bash / Git Bash)** | `for v in GENAI_API_URL GENAI_TOKEN_URL GENAI_SCOPE GENAI_CLIENT_ID GENAI_CLIENT_SECRET GENAI_API_KEY; do val=${!v}; echo "$v ${#val}"; done` |
+| **Purpose** | Lists the six names with the length of each value, without showing the values |
+| **Expected** | Six names, none with length 0 |
 
 **Common errors**
 
@@ -46,7 +145,7 @@ The commands below read them from Terraform and set them as environment variable
 | `Error: No outputs found` or `Backend initialization required` | Not run from the repository root, or `terraform init` not done in this clone | `cd` to the repository root; [DEPLOYMENT.md step 4](DEPLOYMENT.md#4-initialise-terraform) |
 | `ExpiredToken` or `NoCredentialProviders` | Deploy credentials not loaded in this window, or expired | [DEPLOYMENT.md step 2](DEPLOYMENT.md#2-load-deploy-credentials-into-the-shell) |
 | `KeyError: 'demo'` / empty value | No client called `demo` in `api_clients` | Use a name from `terraform -chdir=terraform output -json client_ids` |
-| Lengths print `0 0` | One of the lines failed, or ran in a different window | Check the output of each line; run all three in the same window |
+| Lengths print `0 0` | Part of the command failed, or it ran in a different window | Read the error above the numbers; run the command again in the window you will use |
 
 **On another machine, or in an application:** the six values can be set any other way: an `.env` file outside the repository, a CI secret, or a secret store. Keep the secret and the API key out of source control and out of logs (**Security**, SEC02-BP03). That machine needs no AWS credentials and no Terraform.
 
