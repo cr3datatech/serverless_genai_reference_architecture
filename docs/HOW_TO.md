@@ -151,52 +151,105 @@ export GENAI_API_URL="<api-url>" GENAI_TOKEN_URL="<token-url>" GENAI_SCOPE="<sco
 
 ## 2. Call from the terminal
 
-Every command in this section needs the six variables from [section 1](#1-get-the-connection-settings) **in the same terminal window**. Check with `echo ${#GENAI_API_KEY}` (PowerShell: `$env:GENAI_API_KEY.Length`): 0 means run section 1 first.
+Every command in this section needs the six variables from [section 1](#1-get-the-connection-settings) **in the same terminal window**. Check with `echo ${#GENAI_API_KEY}` (PowerShell: `$env:GENAI_API_KEY.Length`): 0 means run section 1 first. Copy one code block at a time: each is one complete command.
 
 ### 2.1 Python (Bash, Git Bash or PowerShell)
 
+**Before you run:** section 1 in this window. Python 3.10 or later. No AWS credentials needed.
+
+Each command below is complete on its own: copy one block, run it, then the next.
+
+**List the models you can use:**
+
+```
+python examples/genai_client.py --list-models
+```
+
+Expected: three aliases (`balanced`, `best`, `fast`), each with the model behind it, and `fast` marked `(default)`.
+
+**Ask a question:**
+
+```
+python examples/genai_client.py --model balanced "Explain AWS Lambda in two sentences."
+```
+
+Expected: the answer, then a summary line such as `[balanced | 15 in / 71 out tokens | ~$0.00111 | stop: end_turn | request ...]`.
+
+**Ask with instructions and a length limit:**
+
+```
+python examples/genai_client.py --model fast --max-tokens 100 --system "Answer in one sentence." "What is a permissions boundary?"
+```
+
+Expected: a one-sentence answer, then the summary line.
+
 | | |
 |---|---|
-| **Before you run** | Section 1 in this window. Python 3.10 or later. No AWS credentials needed |
-| **Command** | `python examples/genai_client.py --model balanced "Explain AWS Lambda in two sentences."` |
-| **Other forms** | `python examples/genai_client.py --list-models` · `python examples/genai_client.py --model fast --max-tokens 100 --system "Answer in one sentence." "What is a permissions boundary?"` |
 | **Purpose** | Gets a token, calls `POST /v1/chat`, prints the answer, then a summary line. Retries with backoff on `429` and `5xx` |
-| **Expected** | The answer, then `[balanced \| 15 in / 71 out tokens \| ~$0.00111 \| stop: end_turn \| request ...]` |
+| **Options** | `--model` an alias (default `fast`); `--system` instructions for the whole answer; `--max-tokens` the longest answer allowed; `--list-models` list the aliases instead of asking; the question goes last, in quotes |
+| **The summary line** | `in` / `out`: tokens billed. `~$`: the cost estimate the API returns. `stop: end_turn`: the answer is complete (`max_tokens` means it was cut off). `request`: the ID to quote when reporting a problem |
+| **Common errors** | `Missing environment variables`: section 1 wasn't run in this window. `python` not found: try `py` (Windows) or `python3`. `unrecognized arguments`: two commands were pasted on one line, or the question isn't in quotes |
 
 `--from-terraform` (as in [examples/README.md](../examples/README.md)) reads the settings straight from Terraform instead of the variables, and needs the deploy credentials loaded.
 
 ### 2.2 Node.js (Bash, Git Bash or PowerShell)
 
+**Before you run:** section 1 in this window. Node.js 18 or later. No AWS credentials needed.
+
+```
+node examples/genai_client.mjs "Explain AWS Lambda in two sentences." balanced
+```
+
 | | |
 |---|---|
-| **Before you run** | Section 1 in this window. Node.js 18 or later. No AWS credentials needed |
-| **Command** | `node examples/genai_client.mjs "Explain AWS Lambda in two sentences." balanced` |
-| **Purpose** | The same as 2.1, with the Node.js client ([examples/genai_client.mjs](../examples/genai_client.mjs)) |
+| **Purpose** | The same as 2.1, with the Node.js client ([examples/genai_client.mjs](../examples/genai_client.mjs)). The question comes first, then the alias (optional, default `fast`) |
 | **Expected** | The answer, then the same summary line |
 
 ### 2.3 curl (Bash / Git Bash)
 
 Two commands: get a token, then call. The token lasts 60 minutes; reuse it rather than fetching one per call (every token issued is billed).
 
+**Before you run:** section 1 in this window. `curl` and Python 3.10 or later. No AWS credentials needed.
+
+**Get a token** (stored in `TOKEN`; only its length is printed):
+
+```
+TOKEN=$(curl -s -d "grant_type=client_credentials&scope=$GENAI_SCOPE&client_id=$GENAI_CLIENT_ID&client_secret=$GENAI_CLIENT_SECRET" "$GENAI_TOKEN_URL" | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])"); echo ${#TOKEN}
+```
+
+**Call the API:**
+
+```
+curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $GENAI_API_KEY" -H "content-type: application/json" -d '{"model":"fast","messages":[{"role":"user","content":"Explain AWS Lambda in two sentences."}]}' "$GENAI_API_URL/v1/chat"
+```
+
 | | |
 |---|---|
-| **Before you run** | Section 1 in this window. `curl` and Python 3.10 or later. No AWS credentials needed |
-| **Command (token)** | `TOKEN=$(curl -s -d "grant_type=client_credentials&scope=$GENAI_SCOPE&client_id=$GENAI_CLIENT_ID&client_secret=$GENAI_CLIENT_SECRET" "$GENAI_TOKEN_URL" \| python -c "import sys,json;print(json.load(sys.stdin)['access_token'])"); echo ${#TOKEN}` |
-| **Command (call)** | `curl -s -H "Authorization: Bearer $TOKEN" -H "x-api-key: $GENAI_API_KEY" -H "content-type: application/json" -d '{"model":"fast","messages":[{"role":"user","content":"Explain AWS Lambda in two sentences."}]}' "$GENAI_API_URL/v1/chat"` |
 | **Purpose** | The raw HTTP calls, as any language would make them |
 | **Expected** | A number around 800-900 for the token, then `{"output":"...","stop_reason":"end_turn","usage":{...},"cost_estimate_usd":...,"model":{...},"request_id":"..."}` |
-| **Note** | In Git Bash on Windows, keep the JSON in single quotes as shown. A question containing a single quote is easier from Python or Node.js (2.1, 2.2) |
+| **Note** | In Git Bash on Windows, keep the JSON in single quotes as shown. A question containing a single quote is easier from Python or Node.js (2.1, 2.2). After 60 minutes the call returns `401`: get a new token |
 
 ### 2.4 PowerShell without Python or Node.js
 
+**Before you run:** section 1 in this window. Windows PowerShell 5.1 or PowerShell 7. No AWS credentials needed.
+
+**Get a token** (stored in `$token`; only its length is printed):
+
+```
+$token = (Invoke-RestMethod -Method Post -Uri $env:GENAI_TOKEN_URL -Body @{grant_type='client_credentials'; scope=$env:GENAI_SCOPE; client_id=$env:GENAI_CLIENT_ID; client_secret=$env:GENAI_CLIENT_SECRET}).access_token; $token.Length
+```
+
+**Call the API:**
+
+```
+$h = @{Authorization="Bearer $token"; 'x-api-key'=$env:GENAI_API_KEY}; $body = @{model='fast'; messages=@(@{role='user'; content='Explain AWS Lambda in two sentences.'})} | ConvertTo-Json -Depth 5; (Invoke-RestMethod -Method Post -Uri "$env:GENAI_API_URL/v1/chat" -Headers $h -ContentType 'application/json' -Body $body).output
+```
+
 | | |
 |---|---|
-| **Before you run** | Section 1 in this window. Windows PowerShell 5.1 or PowerShell 7. No AWS credentials needed |
-| **Command (token)** | `$token = (Invoke-RestMethod -Method Post -Uri $env:GENAI_TOKEN_URL -Body @{grant_type='client_credentials'; scope=$env:GENAI_SCOPE; client_id=$env:GENAI_CLIENT_ID; client_secret=$env:GENAI_CLIENT_SECRET}).access_token; $token.Length` |
-| **Command (call)** | `$h = @{Authorization="Bearer $token"; 'x-api-key'=$env:GENAI_API_KEY}; $body = @{model='fast'; messages=@(@{role='user'; content='Explain AWS Lambda in two sentences.'})} \| ConvertTo-Json -Depth 5; (Invoke-RestMethod -Method Post -Uri "$env:GENAI_API_URL/v1/chat" -Headers $h -ContentType 'application/json' -Body $body).output` |
 | **Purpose** | The same two calls with built-in cmdlets. Building the body with `ConvertTo-Json` avoids quoting problems |
 | **Expected** | A number around 800-900, then the answer text |
-| **Note** | In Windows PowerShell 5.1, `curl` is an alias for `Invoke-WebRequest`, so the curl commands in 2.3 don't work there; use these, or `curl.exe` |
+| **Note** | In Windows PowerShell 5.1, `curl` is an alias for `Invoke-WebRequest`, so the curl commands in 2.3 don't work there; use these, or `curl.exe`. After 60 minutes the call returns `401`: get a new token |
 
 ### Calling Bedrock directly, without the API
 
@@ -228,8 +281,14 @@ except ApiError as e:
 | | |
 |---|---|
 | **Before you run** | Section 1 in this window (or the six variables set in the code's environment). Python 3.10 or later |
-| **Quick check** | `python -c "import sys; sys.path.insert(0, 'examples'); from genai_client import GenAIClient, Settings; print(GenAIClient(Settings.from_env()).chat('Reply with the single word: hello', model='fast', max_tokens=20)['output'])"` |
-| **Expected** | `hello` |
+
+**Quick check** (run from the repository root):
+
+```
+python -c "import sys; sys.path.insert(0, 'examples'); from genai_client import GenAIClient, Settings; print(GenAIClient(Settings.from_env()).chat('Reply with the single word: hello', model='fast', max_tokens=20)['output'])"
+```
+
+Expected: `hello`.
 
 ### 3.2 Node.js / TypeScript
 
@@ -252,8 +311,14 @@ The file is plain JavaScript (ES module) and works from TypeScript as is; it use
 | | |
 |---|---|
 | **Before you run** | Section 1 in this window (or the six variables set in the code's environment). Node.js 18 or later |
-| **Quick check** | `node --input-type=module -e "import { ask } from './examples/genai_client.mjs'; console.log(await ask('Reply with the single word: hello', 'fast'));"` |
-| **Expected** | `hello` |
+
+**Quick check** (run from the repository root):
+
+```
+node --input-type=module -e "import { ask } from './examples/genai_client.mjs'; console.log(await ask('Reply with the single word: hello', 'fast'));"
+```
+
+Expected: `hello`.
 
 ### 3.3 Other languages
 
